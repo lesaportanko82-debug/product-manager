@@ -2,92 +2,40 @@ name: Deploy to Yandex Object Storage
 
 on:
   push:
-    branches: ["main"]
-
-concurrency:
-  group: deploy
-  cancel-in-progress: true
+    branches:
+      - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build
+      - name: Build project
         run: npm run build
 
-      # 1) Переустанавливаем AWS CLI v2 (официальный инсталлер)
-      - name: Ensure AWS CLI v2
+      - name: Install AWS CLI
         run: |
-          set -euo pipefail
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip -q awscliv2.zip
-          sudo ./aws/install --update
-          aws --version
-
-      # 2) Конфиг + “legacy” режим + path-style
-      - name: Configure AWS CLI for Yandex Object Storage
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_KEY }}
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.aws
-
-          cat > ~/.aws/credentials << EOF
-          [default]
-          aws_access_key_id=$AWS_ACCESS_KEY_ID
-          aws_secret_access_key=$AWS_SECRET_ACCESS_KEY
-          EOF
-
-          cat > ~/.aws/config << EOF
-          [default]
-          region = ru-central1
-          s3 =
-            addressing_style = path
-          EOF
-
-          aws configure list
+          unzip awscliv2.zip
+          sudo ./aws/install
 
       - name: Deploy to Yandex Object Storage
         env:
-          BUCKET: ${{ secrets.YC_BUCKET }}
-          ENDPOINT: ${{ secrets.YC_ENDPOINT }}
-          AWS_REGION: ru-central1
-          AWS_DEFAULT_REGION: ru-central1
-
-          # ВАЖНО: гасим новые checksum/behaviors
-          AWS_DEFAULTS_MODE: legacy
-          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
-          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
-
-          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
+          YC_BUCKET: ${{ secrets.YC_BUCKET }}
         run: |
           set -euo pipefail
-
-          echo "Deploying to bucket: $BUCKET"
-          echo "Using endpoint: $ENDPOINT"
-          aws --version
-
-          # Проверка доступа
-          aws s3api head-bucket \
-            --bucket "$BUCKET" \
-            --endpoint-url "$ENDPOINT" \
-            --region ru-central1
-
-          # Деплой
-          aws s3 sync ./dist "s3://$BUCKET/" \
-            --delete \
-            --endpoint-url "$ENDPOINT" \
-            --region ru-central1
+          echo "Deploying to bucket: $YC_BUCKET"
+          aws s3 sync dist/ s3://$YC_BUCKET --delete --endpoint-url=https://storage.yandexcloud.net
