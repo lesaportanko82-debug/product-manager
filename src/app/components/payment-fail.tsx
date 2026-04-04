@@ -101,7 +101,7 @@ export function PaymentFailPage({ onRetry, onBack }: PaymentFailPageProps) {
         </div>
 
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
-          product-intensive.com — Обучение продакт-менеджменту
+          product-intensive.com.website.yandexcloud.net — Обучение продакт-менеджменту
         </p>
       </motion.div>
     </div>

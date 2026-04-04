@@ -51,6 +51,7 @@ export function PaywallModal({
         plan:        "month",
         userId,
         accessDays:  30,
+        appUrl:      window.location.origin,
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
@@ -106,6 +107,7 @@ export function PaywallModal({
         plan:        "lifetime",
         userId,
         accessDays:  null,
+        appUrl:      window.location.origin,
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────

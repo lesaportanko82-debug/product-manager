@@ -47,6 +47,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
         plan:        "month",
         userId,
         accessDays:  30,
+        appUrl:      window.location.origin,
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
@@ -96,6 +97,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
         plan:        "lifetime",
         userId,
         accessDays:  null,
+        appUrl:      window.location.origin,
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────

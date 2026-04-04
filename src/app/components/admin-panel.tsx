@@ -577,7 +577,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
               <h2 className="font-bold text-foreground">
                 {tab === "users" ? "Пользователи" : tab === "stats" ? "Статистика" : "Настройки"}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">product-intensive.com</p>
+              <p className="text-xs text-muted-foreground mt-0.5">product-intensive.com.website.yandexcloud.net</p>
             </div>
             <button onClick={onClose} className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
               <X className="w-4 h-4" />
