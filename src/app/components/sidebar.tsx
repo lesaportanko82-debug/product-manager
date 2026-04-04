@@ -563,7 +563,9 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
                           const pctModule = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
                           const ModIcon = iconMap[module.icon] || BookOpen;
 
-                          const isUnlocked = isModuleUnlocked(module, completedLessons);
+                          const isUnlocked = accessLevel !== "free"
+                            ? true
+                            : isModuleUnlocked(module, completedLessons);
                           // Module is paid-locked only if it has NO free lessons at all
                           const hasAnyFreeLesson = freeLessonIds
                             ? module.lessons.some(l => freeLessonIds.has(l.id))

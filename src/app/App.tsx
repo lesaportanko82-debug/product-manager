@@ -42,6 +42,7 @@ import { ModuleIntroScreen } from "./components/module-intro";
 import { PaymentSuccessPage } from "./components/payment-success";
 import { PaymentFailPage } from "./components/payment-fail";
 import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { fetchUserAccess } from "./components/user-access";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 
@@ -81,6 +82,7 @@ export default function App() {
   // Auth/Demo mode state
   const [authMode, setAuthMode] = useState<"selector" | "signup" | "login" | null>("selector");
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [showPaywallAfterSignup, setShowPaywallAfterSignup] = useState(false);
 
   // Auth state
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -90,6 +92,8 @@ export default function App() {
   const [paywallModuleTitle, setPaywallModuleTitle] = useState<string | undefined>(undefined);
   // Access level: "free" | "monthly" | "lifetime"
   const [accessLevel, setAccessLevel] = useState<"free" | "monthly" | "lifetime">("free");
+  // canAccessPaidContent — единственная проверка для UI. true = открыть все платные модули
+  const [canAccessPaidContent, setCanAccessPaidContent] = useState<boolean>(false);
   const [onboardingName, setOnboardingName] = useState("");
   const [paymentBanner, setPaymentBanner] = useState<"success" | "failed" | null>(null);
   const { authState, updateAuth, signOut, checkSession } = useAuth();
@@ -167,18 +171,37 @@ export default function App() {
     }
   }, []);
 
-  // Load access level from server
+  // Load access level from get-user-access endpoint (единственный источник правды)
   const loadAccessLevel = useCallback(async (accessToken: string, userId: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/user-access/${userId}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (res.ok) {
-        const { level } = await res.json();
-        setAccessLevel(level === "lifetime" ? "lifetime" : level === "monthly" ? "monthly" : "free");
-      }
-    } catch {}
-  }, []);
+    // Сбрасываем доступ НЕМЕДЛЕННО до завершения async-запроса
+    setCanAccessPaidContent(false);
+    setAccessLevel("free");
+    console.log(`[App] ── loadAccessLevel called ──`);
+    console.log(`[App] [ID-CHECK] authState.userId (текущий пользователь) = "${authState.userId ?? "null"}"`);
+    console.log(`[App] [ID-CHECK] userId передан в get-user-access = "${userId}"`);
+    console.log(`[App] [ID-CHECK] accessToken present = ${!!accessToken}`);
+
+    if (authState.userId && authState.userId !== userId) {
+      console.error(
+        `[App] [ID-MISMATCH] ❌ user mismatch: authState.userId="${authState.userId}" ≠ passed userId="${userId}"`
+      );
+    } else {
+      console.log(`[App] [ID-CHECK] ✅ userId consistent`);
+    }
+
+    // Передаём accessToken — endpoint может требовать Authorization
+    const result = await fetchUserAccess(accessToken, userId);
+    console.log(`[App] userId="${userId}" → accessLevel="${result.accessLevel}" canAccessPaidContent=${result.canAccessPaidContent}`);
+
+    setAccessLevel(result.accessLevel);
+    setCanAccessPaidContent(result.canAccessPaidContent);
+
+    if (result.canAccessPaidContent) {
+      console.log(`[App] ✅ Paid access GRANTED — paywall скрыт, все модули открыты`);
+    } else {
+      console.log(`[App] 🔒 Paid access DENIED — только бесплатные уроки`);
+    }
+  }, [authState.userId]);
 
   // Save progress to Supabase when auth state or progress changes
   const scheduleProgressSync = useCallback((
@@ -217,7 +240,9 @@ export default function App() {
       if (state.accessToken && state.userId) {
         saveProgressToSupabase(state.accessToken, state.userId, [], [], null);
       }
-      setAppStep("onboarding"); // ← show mini onboarding for new users
+      // Show paywall modal immediately after signup
+      setShowPaywallAfterSignup(true);
+      setAppStep("auth"); // Stay on auth screen to show paywall modal
     } else if (state.isAuthenticated && state.accessToken && state.userId) {
       // EXISTING account: wipe local data first, then load strictly from server
       clearAllLocalData();
@@ -358,8 +383,8 @@ export default function App() {
   }, [completedLessons, examScore, scheduleProgressSync]);
 
   const handleSelectLesson = useCallback((lessonId: string) => {
-    // 1. Check paywall first
-    if (accessLevel === "free" && !FREE_LESSON_IDS.has(lessonId) && !TESTING_ALL_OPEN) {
+    // 1. Check paywall — используем canAccessPaidContent как единственную проверку
+    if (!canAccessPaidContent && !FREE_LESSON_IDS.has(lessonId) && !TESTING_ALL_OPEN) {
       const allLessons = getAllLessons();
       const lessonData = allLessons.find(l => l.lesson.id === lessonId);
       setPaywallModuleTitle(lessonData?.module.title);
@@ -392,7 +417,7 @@ export default function App() {
     setSelectedLesson(lessonId);
     setViewMode("lesson");
     window.scrollTo(0, 0);
-  }, [accessLevel]);
+  }, [canAccessPaidContent]);
 
   const handleOpenFinalExam = useCallback(() => {
     setViewMode("exam");
@@ -538,7 +563,8 @@ export default function App() {
         return <CompetencyRadar completedLessons={completedLessons} onClose={() => setView("lesson")} onSelectLesson={handleSelectLesson} />;
       default:
         // If selected lesson is locked → show inline paywall screen
-        if (accessLevel === "free" && selectedLesson && !FREE_LESSON_IDS.has(selectedLesson) && !TESTING_ALL_OPEN) {
+        // Используем canAccessPaidContent как единственную проверку доступа к платным урокам
+        if (!canAccessPaidContent && selectedLesson && !FREE_LESSON_IDS.has(selectedLesson) && !TESTING_ALL_OPEN) {
           return (
             <PaywallScreen
               moduleTitle={paywallModuleTitle}
@@ -547,6 +573,7 @@ export default function App() {
                 setViewMode("lesson");
               }}
               userId={authState.userId ?? undefined}
+              userEmail={authState.email ?? undefined}
               accessToken={authState.accessToken ?? undefined}
             />
           );
@@ -655,6 +682,22 @@ export default function App() {
             <AdminPanel onClose={() => setShowAdminPanel(false)} />
           )}
         </AnimatePresence>
+        {/* Show paywall modal after successful signup */}
+        <AnimatePresence>
+          {showPaywallAfterSignup && (
+            <PaywallModal
+              isOpen={showPaywallAfterSignup}
+              onClose={() => {
+                setShowPaywallAfterSignup(false);
+                setAppStep("onboarding"); // Proceed to onboarding after closing paywall
+              }}
+              moduleTitle="Полный доступ к курсу"
+              userId={authState.userId ?? undefined}
+              userEmail={authState.email ?? undefined}
+              accessToken={authState.accessToken ?? undefined}
+            />
+          )}
+        </AnimatePresence>
       </>
     );
   }
@@ -709,8 +752,8 @@ export default function App() {
       <Sidebar
         selectedLesson={selectedLesson}
         onSelectLesson={handleSelectLesson}
-        accessLevel={TESTING_ALL_OPEN ? "lifetime" : accessLevel}
-        freeLessonIds={TESTING_ALL_OPEN ? undefined : FREE_LESSON_IDS}
+        accessLevel={TESTING_ALL_OPEN ? "lifetime" : (canAccessPaidContent ? accessLevel : "free")}
+        freeLessonIds={TESTING_ALL_OPEN ? undefined : (canAccessPaidContent ? undefined : FREE_LESSON_IDS)}
         completedLessons={completedLessons}
         onOpenFinalExam={handleOpenFinalExam}
         showFinalExam={viewMode === "exam"}
@@ -737,6 +780,8 @@ export default function App() {
         onSignOut={() => {
           clearAllLocalData();
           signOut();
+          setCanAccessPaidContent(false);
+          setAccessLevel("free");
           setAppStep("auth");
           try { localStorage.removeItem("course-started"); } catch {}
           try { localStorage.removeItem("auth-state"); } catch {}
@@ -830,6 +875,8 @@ export default function App() {
             onSignOut={() => {
               clearAllLocalData();
               signOut();
+              setCanAccessPaidContent(false);
+              setAccessLevel("free");
               setShowProfileCabinet(false);
               setAppStep("auth");
               try { localStorage.removeItem("course-started"); } catch {}
@@ -848,12 +895,13 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Paywall */}
+      {/* Paywall — скрываем если canAccessPaidContent */}
       <PaywallModal
-        isOpen={showPaywall}
+        isOpen={showPaywall && !canAccessPaidContent}
         onClose={() => setShowPaywall(false)}
         moduleTitle={paywallModuleTitle}
         userId={authState.userId ?? undefined}
+        userEmail={authState.email ?? undefined}
         accessToken={authState.accessToken ?? undefined}
       />
     </div>

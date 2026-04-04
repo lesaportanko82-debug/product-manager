@@ -1,65 +1,143 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Lock, Star, Infinity, MessageCircle, CheckCircle2, Zap, BookOpen, Trophy, Bot, CreditCard, Loader2, AlertCircle } from "lucide-react";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import {
+  X, Lock, Star, Infinity, CheckCircle2, Zap,
+  BookOpen, Trophy, Bot, CreditCard, Loader2, AlertCircle,
+} from "lucide-react";
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
+// ─── Единственный endpoint — прямой вызов super-task ───────────────────────
+const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
+const SITE_KEY = "super_secret_12345";
 
 interface PaywallModalProps {
   isOpen: boolean;
   onClose: () => void;
   moduleTitle?: string;
   userId?: string;
+  userEmail?: string;
   accessToken?: string;
 }
 
 const PERKS = [
   { icon: <BookOpen className="w-4 h-4" />, text: "22 продвинутых модуля" },
-  { icon: <Bot className="w-4 h-4" />, text: "AI-ассистент без ограничений" },
-  { icon: <Trophy className="w-4 h-4" />, text: "Финальный экзамен + сертификат" },
-  { icon: <Zap className="w-4 h-4" />, text: "Все инструменты и тренажёры" },
-  { icon: <Star className="w-4 h-4" />, text: "Пожизненный доступ к обновлениям" },
+  { icon: <Bot className="w-4 h-4" />,      text: "AI-ассистент без ограничений" },
+  { icon: <Trophy className="w-4 h-4" />,   text: "Финальный экзамен + сертификат" },
+  { icon: <Zap className="w-4 h-4" />,      text: "Все инструменты и тренажёры" },
+  { icon: <Star className="w-4 h-4" />,     text: "Пожизненный доступ к обновлениям" },
 ];
 
-export function PaywallModal({ isOpen, onClose, moduleTitle, userId, accessToken }: PaywallModalProps) {
+export function PaywallModal({
+  isOpen, onClose, moduleTitle, userId, userEmail,
+}: PaywallModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]             = useState<string | null>(null);
 
-  const handleTelegram = () => {
-    window.open("https://t.me/ohh_lessya", "_blank");
-  };
-
-  const handleRobokassaPayment = async (plan: "monthly" | "lifetime") => {
-    if (!userId || !accessToken) {
-      handleTelegram();
+  // ── Месячный тариф ────────────────────────────────────────────────────────
+  const handleMonthly = async () => {
+    if (!userId || !userEmail) {
+      window.open("https://t.me/ohh_lessya", "_blank");
       return;
     }
 
     setError(null);
-    setLoadingPlan(plan);
+    setLoadingPlan("monthly");
 
     try {
-      const appUrl = window.location.origin + window.location.pathname;
-      const res = await fetch(`${API_BASE}/robokassa/init`, {
-        method: "POST",
+      const body = {
+        amount:      "100.00",
+        description: "Доступ на месяц",
+        orderId:     `month_${Date.now()}`,
+        email:       userEmail,
+        plan:        "month",
+        userId,
+        accessDays:  30,
+      };
+
+      // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
+      console.log(`[paywall-modal] [ID-CHECK] userId sent to super-task (monthly) = "${userId}"`);
+      console.log(`[paywall-modal] [ID-CHECK] userEmail = "${userEmail}"`);
+      console.log("[payment] monthly →", body);
+
+      const res = await fetch(SUPER_TASK_URL, {
+        method:  "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`,
+          "x-site-key":   SITE_KEY,
         },
-        body: JSON.stringify({ userId, plan, accessToken, appUrl }),
+        body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(async () => {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Не JSON (${res.status}): ${text.slice(0, 200)}`);
+      });
 
-      if (!res.ok || !data.paymentUrl) {
-        setError(data.error || "Не удалось инициализировать оплату. Попробуйте позже.");
-        setLoadingPlan(null);
-        return;
-      }
+      console.log("[payment] monthly ответ:", res.status, data);
 
-      window.location.href = data.paymentUrl;
-    } catch (err) {
-      setError("Ошибка соединения. Свяжитесь с администратором.");
+      if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`);
+
+      const url = data.confirmationUrl;
+      if (!url) throw new Error("confirmationUrl отсутствует в ответе");
+
+      window.location.href = url;
+    } catch (err: any) {
+      console.error("[payment] monthly ошибка:", err);
+      setError(err.message ?? "Ошибка соединения — попробуйте ещё раз");
+      setLoadingPlan(null);
+    }
+  };
+
+  // ── Вечный тариф ─────────────────────────────────────────────────────────
+  const handleLifetime = async () => {
+    if (!userId || !userEmail) {
+      window.open("https://t.me/ohh_lessya", "_blank");
+      return;
+    }
+
+    setError(null);
+    setLoadingPlan("lifetime");
+
+    try {
+      const body = {
+        amount:      "100.00",
+        description: "Вечный доступ",
+        orderId:     `lifetime_${Date.now()}`,
+        email:       userEmail,
+        plan:        "lifetime",
+        userId,
+        accessDays:  null,
+      };
+
+      // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
+      console.log(`[paywall-modal] [ID-CHECK] userId sent to super-task (lifetime) = "${userId}"`);
+      console.log(`[paywall-modal] [ID-CHECK] userEmail = "${userEmail}"`);
+      console.log("[payment] lifetime →", body);
+
+      const res = await fetch(SUPER_TASK_URL, {
+        method:  "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-site-key":   SITE_KEY,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json().catch(async () => {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Не JSON (${res.status}): ${text.slice(0, 200)}`);
+      });
+
+      console.log("[payment] lifetime ответ:", res.status, data);
+
+      if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`);
+
+      const url = data.confirmationUrl;
+      if (!url) throw new Error("confirmationUrl отсутствует в ответе");
+
+      window.location.href = url;
+    } catch (err: any) {
+      console.error("[payment] lifetime ошибка:", err);
+      setError(err.message ?? "Ошибка соединения — попробуйте ещё раз");
       setLoadingPlan(null);
     }
   };
@@ -107,7 +185,7 @@ export function PaywallModal({ isOpen, onClose, moduleTitle, userId, accessToken
 
               <div className="bg-white/15 rounded-xl px-4 py-3">
                 <p className="text-white text-[0.875rem] font-medium">
-                  Первые 3 урока - <span className="text-emerald-200">бесплатно</span> 🎉
+                  Первые 3 урока — <span className="text-emerald-200">бесплатно</span> 🎉
                 </p>
                 <p className="text-white/70 text-[0.75rem] mt-0.5">
                   Для доступа ко всем модулям и урокам нужен полный доступ
@@ -151,11 +229,11 @@ export function PaywallModal({ isOpen, onClose, moduleTitle, userId, accessToken
                 >@ohh_lessya</a>
               </p>
 
-              {/* Monthly plan */}
+              {/* ── Доступ на месяц ── */}
               <motion.button
                 whileHover={{ scale: isLoading ? 1 : 1.02 }}
                 whileTap={{ scale: isLoading ? 1 : 0.98 }}
-                onClick={() => !isLoading && handleRobokassaPayment("monthly")}
+                onClick={handleMonthly}
                 disabled={isLoading}
                 className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl
                   border-2 border-teal-200 dark:border-teal-700 bg-teal-50/50 dark:bg-teal-900/20
@@ -175,16 +253,16 @@ export function PaywallModal({ isOpen, onClose, moduleTitle, userId, accessToken
                   </p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="text-[1.125rem] font-bold text-teal-600 dark:text-teal-400">$70</p>
+                  <p className="text-[1.125rem] font-bold text-teal-600 dark:text-teal-400">7000₽</p>
                   <p className="text-[0.6875rem] text-muted-foreground/60">/ месяц</p>
                 </div>
               </motion.button>
 
-              {/* Lifetime plan */}
+              {/* ── Вечный доступ ── */}
               <motion.button
                 whileHover={{ scale: isLoading ? 1 : 1.02 }}
                 whileTap={{ scale: isLoading ? 1 : 0.98 }}
-                onClick={() => !isLoading && handleRobokassaPayment("lifetime")}
+                onClick={handleLifetime}
                 disabled={isLoading}
                 className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl
                   border-2 border-emerald-400 dark:border-emerald-600
@@ -211,7 +289,7 @@ export function PaywallModal({ isOpen, onClose, moduleTitle, userId, accessToken
                   </p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="text-[1.125rem] font-bold text-emerald-600 dark:text-emerald-400">$90</p>
+                  <p className="text-[1.125rem] font-bold text-emerald-600 dark:text-emerald-400">9000₽</p>
                   <p className="text-[0.6875rem] text-muted-foreground/60">навсегда</p>
                 </div>
               </motion.button>
@@ -219,12 +297,23 @@ export function PaywallModal({ isOpen, onClose, moduleTitle, userId, accessToken
               {/* Payment badge */}
               <div className="flex items-center justify-center gap-1.5 text-[0.6875rem] text-muted-foreground/50">
                 <CreditCard className="w-3 h-3" />
-                <span>Оплата через Робокассу - карты РФ, СБП, кошельки</span>
+                <span>Оплата через ЮKassa — карты РФ, СБП, кошельки</span>
               </div>
 
               <p className="text-center text-[0.6875rem] text-muted-foreground/50 pt-1">
-                После оплаты перезайдите - доступ активируется автоматически
+                После оплаты перезайдите — доступ активируется автоматически
               </p>
+
+              {/* Free lessons button */}
+              <button
+                onClick={onClose}
+                className="w-full mt-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700
+                  text-[0.8125rem] text-muted-foreground hover:text-foreground
+                  hover:bg-slate-50 dark:hover:bg-slate-800/50
+                  transition-all duration-200"
+              >
+                Смотреть бесплатные уроки
+              </button>
             </div>
           </motion.div>
         </motion.div>

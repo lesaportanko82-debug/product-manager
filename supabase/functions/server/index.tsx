@@ -15,7 +15,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization", "X-Admin-Password"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Admin-Password", "x-site-key"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -785,8 +785,8 @@ ${mode === "analyze" ? `
     { "step": 1, "action": "Конкретное действие", "metric": "Как измерить результат", "timeframe": "Когда" }
   ],
   "risks": ["риск 1", "риск 2"],
-  "northStarMetric": "Предлагаемая North Star метрика для этого продукта",
-  "recommendedModules": ["Модуль или тема из курса PM, которая поможет углубиться"]
+  "northStarMetric": "Пред��агаемая North Star метрика для этого продукта",
+  "recommendedModules": ["Модул�� или тема из курса PM, которая поможет углубиться"]
 }
 Отвечай ТОЛЬКО валидным JSON, без дополнительного текста.` : ""}
 ${mode === "roleplay" ? `
@@ -1512,7 +1512,7 @@ app.post("/make-server-279b4dfa/competency-analysis", async (c) => {
 
     const systemPrompt = `Ты — AI-коуч по продакт-менеджменту. Анализируешь компетенции студента PM-курса и даёшь персонализированные рекомендации.
 
-Отвечай строго JSON:
+От��ечай строго JSON:
 {
   "summary": "1-2 предложения — общая оценка профиля",
   "priorityActions": [
@@ -1684,7 +1684,7 @@ app.get("/make-server-279b4dfa/user-progress/:userId", async (c) => {
 });
 
 // ===== Admin: Get all users =====
-const ADMIN_PASSWORD = "evarediska";
+const ADMIN_PASSWORD = "rediska";
 
 app.get("/make-server-279b4dfa/admin/users", async (c) => {
   try {
@@ -1694,16 +1694,51 @@ app.get("/make-server-279b4dfa/admin/users", async (c) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (listErr) { console.log(`Error listing users: ${listErr.message}`); return c.json({ error: `Error listing users: ${listErr.message}` }, 500); }
+    // Fetch Postgres user_access rows for all users in one query
+    const { data: pgRows } = await supabase
+      .from("user_access")
+      .select("user_id, plan, status, expires_at, updated_at");
+    const pgByUserId: Record<string, { plan: string; status: string; expires_at: string | null; updated_at: string | null }> = {};
+    for (const row of (pgRows || []) as any[]) {
+      pgByUserId[row.user_id] = { plan: row.plan, status: row.status, expires_at: row.expires_at, updated_at: row.updated_at };
+    }
+
     const users = await Promise.all((listData?.users || []).map(async (u: any) => {
       const blocked = await kv.get(`blocked-user:${u.id}`);
       const progress = await kv.get(`user-progress:${u.id}`);
       const accessData = await kv.get(`user-access:${u.id}`);
+      const pgRow = pgByUserId[u.id];
+
+      // Merge: KV OR Postgres — whichever gives paid access
       let accessLevel = "free";
+      let accessExpiresAt: string | null = null;
+      let accessGrantedAt: string | null = null;
+
+      // Check KV first (admin manual grants)
       if (accessData?.level === "lifetime") {
         accessLevel = "lifetime";
-      } else if (accessData?.level === "monthly" && accessData?.expiresAt) {
+        accessGrantedAt = accessData?.grantedAt || null;
+      } else if ((accessData?.level === "monthly" || accessData?.level === "month") && accessData?.expiresAt) {
         accessLevel = new Date(accessData.expiresAt) < new Date() ? "free" : "monthly";
+        accessExpiresAt = accessData?.expiresAt || null;
+        accessGrantedAt = accessData?.grantedAt || null;
       }
+
+      // Check Postgres (YooKassa/super-task payments) — overrides KV if paid
+      if (pgRow && pgRow.status === "active") {
+        if (pgRow.plan === "lifetime") {
+          accessLevel = "lifetime";
+          accessGrantedAt = pgRow.updated_at || accessGrantedAt;
+        } else if ((pgRow.plan === "month" || pgRow.plan === "monthly")) {
+          const notExpired = !pgRow.expires_at || new Date(pgRow.expires_at) > new Date();
+          if (notExpired && accessLevel !== "lifetime") {
+            accessLevel = "monthly";
+            accessExpiresAt = pgRow.expires_at;
+            accessGrantedAt = pgRow.updated_at || accessGrantedAt;
+          }
+        }
+      }
+
       return {
         id: u.id,
         email: u.email,
@@ -1714,8 +1749,8 @@ app.get("/make-server-279b4dfa/admin/users", async (c) => {
         completedLessons: progress?.completedLessons?.length || 0,
         examScore: progress?.examScore || null,
         accessLevel,
-        accessExpiresAt: accessData?.expiresAt || null,
-        accessGrantedAt: accessData?.grantedAt || null,
+        accessExpiresAt,
+        accessGrantedAt,
       };
     }));
     return c.json({ users });
@@ -1737,12 +1772,39 @@ app.post("/make-server-279b4dfa/admin/users/:userId/set-access", async (c) => {
       exp.setDate(exp.getDate() + 30);
       expiresAt = exp.toISOString();
     }
+
+    // Write to KV (legacy / fast path)
     await kv.set(`user-access:${userId}`, { level, grantedAt: now.toISOString(), expiresAt });
+
+    // Write to Postgres user_access (same table super-task uses after YooKassa payment)
+    // Plan values: "lifetime" | "month" (canonical) | "free"
+    try {
+      const { createClient } = await import("npm:@supabase/supabase-js@2");
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const pgPlan = level === "monthly" ? "month" : level; // normalize: "monthly" → "month"
+      const pgStatus = level === "free" ? "inactive" : "active";
+      await supabase.from("user_access").upsert(
+        { user_id: userId, plan: pgPlan, status: pgStatus, expires_at: expiresAt, updated_at: now.toISOString() },
+        { onConflict: "user_id" }
+      );
+      console.log(`[set-access] KV + Postgres updated: userId="${userId}" level="${level}"`);
+    } catch (pgErr) {
+      console.log(`[set-access] Postgres write failed (KV succeeded): ${pgErr}`);
+    }
+
     return c.json({ success: true, userId, level, expiresAt });
   } catch (err) { return c.json({ error: `Error setting user access: ${err}` }, 500); }
 });
 
 // ===== Get user access level (authenticated) =====
+// Sources of truth (in priority order):
+//   1. Postgres table `user_access` — written by super-task after YooKassa payment
+//      canonical plan values: "month" | "lifetime"
+//   2. KV store — written by Robokassa / manual grant flows
+//      plan/level values: "monthly" | "lifetime" (legacy) or "month" (newer)
+//
+// Unified return values: level = "month" | "lifetime" | "free"
+// Frontend maps "month" and "lifetime" → active access; "free" → paywall.
 app.get("/make-server-279b4dfa/user-access/:userId", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
@@ -1751,20 +1813,281 @@ app.get("/make-server-279b4dfa/user-access/:userId", async (c) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: { user }, error: authErr } = await supabase.auth.getUser(accessToken);
     if (authErr || !user) return c.json({ error: "Unauthorized" }, 401);
-    const userId = c.req.param("userId");
-    if (user.id !== userId) return c.json({ error: "Forbidden" }, 403);
-    const accessData = await kv.get(`user-access:${userId}`);
-    let level = "free";
-    let expiresAt: string | null = null;
-    if (accessData?.level === "lifetime") {
-      level = "lifetime";
-    } else if (accessData?.level === "monthly" && accessData?.expiresAt) {
-      const expired = new Date(accessData.expiresAt) < new Date();
-      level = expired ? "free" : "monthly";
-      expiresAt = expired ? null : accessData.expiresAt;
+
+    const paramUserId = c.req.param("userId"); // userId from URL
+    const authUserId  = user.id;               // userId from JWT
+
+    // ── [1] User ID consistency: JWT vs URL param ─────────────────────────
+    console.log(`[user-access] [ID-CHECK] authUserId (JWT)   = "${authUserId}"`);
+    console.log(`[user-access] [ID-CHECK] paramUserId (URL)  = "${paramUserId}"`);
+
+    if (authUserId !== paramUserId) {
+      console.log(`[user-access] [ID-MISMATCH] JWT="${authUserId}" ≠ param="${paramUserId}" → 403`);
+      return c.json({
+        error: "user mismatch: access belongs to another user",
+        authUserId,
+        paramUserId,
+      }, 403);
     }
-    return c.json({ level, expiresAt });
-  } catch (err) { return c.json({ error: `Error getting user access: ${err}` }, 500); }
+
+    const userId = authUserId; // confirmed: JWT == param
+    console.log(`[user-access] [ID-CHECK] ✅ userId confirmed = "${userId}"`);
+
+    // Helper: always echo resolvedUserId so the frontend can cross-check
+    const reply = (payload: Record<string, unknown>, status = 200) =>
+      c.json({ ...payload, resolvedUserId: userId }, status as any);
+
+    // ── [2] Postgres user_access (written by super-task / YooKassa) ───────
+    try {
+      const { data: pgRow, error: pgErr } = await supabase
+        .from("user_access")
+        .select("user_id, plan, status, expires_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (pgErr) {
+        console.log(`[user-access] PG error: ${pgErr.message} code=${pgErr.code}`);
+      } else if (pgRow) {
+        const { user_id: pgUserId, plan, status, expires_at } =
+          pgRow as { user_id: string; plan: string; status: string; expires_at: string | null };
+
+        // Cross-check PG row user_id vs authenticated user
+        console.log(`[user-access] [ID-CHECK] PG row user_id = "${pgUserId}"`);
+        if (pgUserId !== userId) {
+          console.log(`[user-access] [ID-MISMATCH] PG row belongs to "${pgUserId}" ≠ auth "${userId}"`);
+          return reply({
+            level: "free", expiresAt: null, source: "postgres",
+            error: "user mismatch: access belongs to another user",
+            pgUserId,
+          });
+        }
+
+        console.log(`[user-access] PG row: plan="${plan}" status="${status}" expires_at="${expires_at}"`);
+
+        if (status !== "active") {
+          console.log(`[user-access] PG: status="${status}" ≠ active → free`);
+          return reply({ level: "free", expiresAt: null, source: "postgres" });
+        }
+
+        if (plan === "lifetime") {
+          console.log(`[user-access] PG: ✅ lifetime active → GRANTED`);
+          return reply({ level: "lifetime", expiresAt: null, source: "postgres" });
+        }
+
+        if (plan === "month" || plan === "monthly") {
+          if (expires_at === null) {
+            console.log(`[user-access] PG: ✅ plan="${plan}" expires_at=null → GRANTED (no expiry set by super-task)`);
+            return reply({ level: "month", expiresAt: null, source: "postgres" });
+          }
+          const isExpired = new Date(expires_at) <= new Date();
+          if (isExpired) {
+            console.log(`[user-access] PG: plan="${plan}" expired at ${expires_at} → free`);
+            return reply({ level: "free", expiresAt: expires_at, source: "postgres", reason: "expired" });
+          }
+          console.log(`[user-access] PG: ✅ plan="${plan}" valid until ${expires_at} → GRANTED`);
+          return reply({ level: "month", expiresAt: expires_at, source: "postgres" });
+        }
+
+        console.log(`[user-access] PG: unknown plan="${plan}" → free`);
+        return reply({ level: "free", expiresAt: null, source: "postgres", reason: `unknown plan: ${plan}` });
+      } else {
+        console.log(`[user-access] PG: no row for user_id="${userId}" → checking KV`);
+      }
+    } catch (pgEx) {
+      console.log(`[user-access] PG exception:`, pgEx);
+    }
+
+    // ── [3] KV fallback (Robokassa / manual grants) ───────────────────────
+    const accessData = await kv.get(`user-access:${userId}`);
+    console.log(`[user-access] KV[user-access:${userId}]:`, JSON.stringify(accessData));
+
+    if (!accessData) {
+      console.log(`[user-access] KV: no entry → free`);
+      return reply({ level: "free", expiresAt: null, source: "none" });
+    }
+
+    const kvLevel: string       = accessData.level    || "";
+    const kvExpires: string | null = accessData.expiresAt || null;
+    const kvUserId: string      = accessData.userId   || "";
+
+    // Cross-check userId stored in KV (if present)
+    if (kvUserId && kvUserId !== userId) {
+      console.log(`[user-access] [ID-MISMATCH] KV entry userId="${kvUserId}" ≠ auth "${userId}"`);
+      return reply({
+        level: "free", expiresAt: null, source: "kv",
+        error: "user mismatch: access belongs to another user",
+        kvUserId,
+      });
+    }
+
+    if (kvLevel === "lifetime") {
+      console.log(`[user-access] KV: ✅ lifetime → GRANTED`);
+      return reply({ level: "lifetime", expiresAt: null, source: "kv" });
+    }
+
+    if (kvLevel === "month" || kvLevel === "monthly") {
+      if (kvExpires !== null && new Date(kvExpires) <= new Date()) {
+        console.log(`[user-access] KV: "${kvLevel}" expired at ${kvExpires} → free`);
+        return reply({ level: "free", expiresAt: kvExpires, source: "kv", reason: "expired" });
+      }
+      console.log(`[user-access] KV: ✅ "${kvLevel}" active → GRANTED`);
+      return reply({ level: "month", expiresAt: kvExpires, source: "kv" });
+    }
+
+    console.log(`[user-access] KV: unrecognised level="${kvLevel}" → free`);
+    return reply({ level: "free", expiresAt: null, source: "kv", reason: `unknown level: ${kvLevel}` });
+  } catch (err) {
+    console.log(`[user-access] unexpected error:`, err);
+    return c.json({ error: `Error getting user access: ${err}` }, 500);
+  }
+});
+
+// ===== My Access: lookup by userId + site-key, NO JWT validation =====
+// Принимает ?userId=UUID, проверяет x-site-key (Authorization = anon key, валидируется gateway).
+// Читает Postgres (service role, обходит RLS) + KV с несколькими паттернами ключей.
+// Не вызывает auth.getUser() — устраняет проблему холодного старта.
+app.get("/make-server-279b4dfa/my-access", async (c) => {
+  try {
+    const siteKey = c.req.header("x-site-key");
+    if (siteKey !== "super_secret_12345") {
+      console.log(`[my-access] bad site key: "${siteKey}"`);
+      return c.json({ level: "free", source: "bad-key" }, 401);
+    }
+
+    const userId = c.req.query("userId") || c.req.query("user_id") || "";
+    if (!userId) {
+      console.log("[my-access] no userId param → free");
+      return c.json({ level: "free", source: "no-userid" });
+    }
+    console.log(`[my-access] userId="${userId}"`);
+
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // ── Вспомогательная функция: преобразовать строку Postgres → уровень доступа
+    const parseRow = (row: Record<string, unknown>): string | null => {
+      console.log(`[my-access] PG row raw:`, JSON.stringify(row));
+      // Гибкие имена столбцов: plan / type / access_type / access_level
+      const plan   = String(row.plan ?? row.type ?? row.access_type ?? row.access_level ?? "").toLowerCase().trim();
+      // Гибкий статус: status / is_active / active
+      const active = row.status === "active" || row.is_active === true || row.active === true;
+      // expires_at / expired_at / valid_until
+      const exp    = (row.expires_at ?? row.expired_at ?? row.valid_until ?? null) as string | null;
+      console.log(`[my-access] PG parsed: plan="${plan}" active=${active} exp="${exp}"`);
+
+      if (!active) return null;
+      if (plan === "lifetime" || plan === "forever" || plan === "full") return "lifetime";
+      if (plan === "month" || plan === "monthly" || plan === "paid") {
+        const ok = !exp || new Date(exp) > new Date();
+        return ok ? "monthly" : null;
+      }
+      // Любой активный план → открываем как lifetime (не узнаём тип)
+      if (plan && plan !== "free") return "lifetime";
+      return null;
+    };
+
+    // 1. Postgres: по user_id (UUID)
+    {
+      const { data: pgRow, error: pgErr } = await supabase
+        .from("user_access")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (pgErr) {
+        console.log(`[my-access] PG(user_id) error: ${pgErr.message} code=${pgErr.code}`);
+      } else if (pgRow) {
+        const level = parseRow(pgRow as Record<string, unknown>);
+        if (level === "lifetime") return c.json({ level: "lifetime", userId, source: "postgres-user_id" });
+        if (level === "monthly")  return c.json({ level: "monthly",  userId, source: "postgres-user_id" });
+        // Строка есть, но доступ истёк или free
+        console.log(`[my-access] PG row found but no paid access → KV`);
+      } else {
+        console.log(`[my-access] no PG row by user_id → try id column`);
+      }
+    }
+
+    // 2. Postgres: по id (если super-task пишет в колонку "id" а не "user_id")
+    {
+      const { data: pgRow, error: pgErr } = await supabase
+        .from("user_access")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!pgErr && pgRow) {
+        const level = parseRow(pgRow as Record<string, unknown>);
+        if (level === "lifetime") return c.json({ level: "lifetime", userId, source: "postgres-id" });
+        if (level === "monthly")  return c.json({ level: "monthly",  userId, source: "postgres-id" });
+        console.log(`[my-access] PG(id) row found but no paid access`);
+      }
+    }
+
+    // 3. KV с несколькими возможными паттернами ключей
+    const kvKeys = [
+      `user-access:${userId}`,  // наш стандарт
+      `access:${userId}`,       // альтернатива
+      `paid:${userId}`,         // ещё вариант
+    ];
+    for (const key of kvKeys) {
+      const kvData = await kv.get(key);
+      if (!kvData) continue;
+      console.log(`[my-access] KV["${key}"]:`, JSON.stringify(kvData));
+      const lvl = String(kvData.level ?? kvData.plan ?? kvData.type ?? "").toLowerCase();
+      if (lvl === "lifetime") return c.json({ level: "lifetime", userId, source: `kv:${key}` });
+      if (lvl === "month" || lvl === "monthly") {
+        const exp = kvData.expiresAt ?? kvData.expires_at ?? null;
+        if (!exp || new Date(exp) > new Date()) return c.json({ level: "monthly", userId, source: `kv:${key}` });
+      }
+    }
+
+    console.log(`[my-access] no paid access found → free`);
+    return c.json({ level: "free", userId, source: "none" });
+  } catch (err) {
+    console.log(`[my-access] error:`, err);
+    return c.json({ level: "free", source: "error", error: String(err) });
+  }
+});
+
+// ===== Admin: Debug access for a specific userId (shows raw Postgres + KV) =====
+app.get("/make-server-279b4dfa/admin/debug-access/:userId", async (c) => {
+  try {
+    const adminPass = c.req.header("X-Admin-Password");
+    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+
+    const userId = c.req.param("userId");
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // PG: by user_id
+    const { data: pgByUserId, error: pgErr1 } = await supabase.from("user_access").select("*").eq("user_id", userId).maybeSingle();
+    // PG: by id
+    const { data: pgById, error: pgErr2 } = await supabase.from("user_access").select("*").eq("id", userId).maybeSingle();
+    // All rows (for inspection)
+    const { data: allRows } = await supabase.from("user_access").select("*").limit(20);
+
+    // KV
+    const kvKeys = [`user-access:${userId}`, `access:${userId}`, `paid:${userId}`];
+    const kvResults: Record<string, unknown> = {};
+    for (const k of kvKeys) { kvResults[k] = await kv.get(k); }
+
+    return c.json({
+      userId,
+      postgres: {
+        byUserId: pgByUserId ?? null,
+        byUserIdError: pgErr1?.message ?? null,
+        byId: pgById ?? null,
+        byIdError: pgErr2?.message ?? null,
+        allRows: allRows ?? [],
+      },
+      kv: kvResults,
+    });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
 });
 
 // ===== Admin: Toggle user access =====
@@ -2169,6 +2492,235 @@ app.get("/make-server-279b4dfa/payment/status", async (c) => {
     console.log(`Error getting payment status: ${err}`);
     return c.json({ error: `Error getting payment status: ${err}` }, 500);
   }
+});
+
+// ===== Payment Proxy (CORS fix for super-task) =====
+app.post("/make-server-279b4dfa/payment/init", async (c) => {
+  try {
+    const body = await c.req.json();
+    console.log("Payment proxy: forwarding to super-task, plan=", body.plan);
+
+    const res = await fetch("https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-site-key": "super_secret_12345",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    console.log("Payment proxy: super-task responded", res.status, JSON.stringify(data));
+
+    return c.json(data, res.status as any);
+  } catch (err) {
+    console.log(`Payment proxy error: ${err}`);
+    return c.json({ error: `Proxy error: ${err}` }, 500);
+  }
+});
+
+// ===== YooKassa Payment Integration =====
+// YooKassa: initialize payment (create order, return payment URL)
+app.post("/make-server-279b4dfa/yookassa/init", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { userId, plan, accessToken, appUrl } = body;
+
+    if (!userId || !plan || !accessToken) {
+      return c.json({ error: "Missing required fields: userId, plan, accessToken" }, 400);
+    }
+    if (plan !== "monthly" && plan !== "lifetime") {
+      return c.json({ error: "Invalid plan. Must be 'monthly' or 'lifetime'" }, 400);
+    }
+
+    // Verify user authentication
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !user) {
+      console.log(`YooKassa init: unauthorized. Error: ${authErr?.message}`);
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const YOOKASSA_SHOP_ID = Deno.env.get("YOOKASSA_SHOP_ID");
+    const YOOKASSA_SECRET_KEY = Deno.env.get("YOOKASSA_SECRET_KEY");
+
+    if (!YOOKASSA_SHOP_ID || !YOOKASSA_SECRET_KEY) {
+      console.log("YooKassa: credentials not configured");
+      return c.json({ error: "YooKassa payment is not configured on the server" }, 500);
+    }
+
+    // Amounts in RUB (временно 100.00 для тестирования)
+    const amount = plan === "lifetime" ? "100.00" : "100.00";
+    const description = plan === "lifetime"
+      ? "Вечный доступ к курсу по продакт-менеджменту"
+      : "Доступ к курсу по продакт-менеджменту на 30 дней";
+
+    const idempotenceKey = `${userId}-${plan}-${Date.now()}`;
+
+    // Create YooKassa payment
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const serverBase = `${supabaseUrl}/functions/v1/make-server-279b4dfa`;
+    const encodedAppUrl = encodeURIComponent(appUrl || "");
+
+    const paymentPayload = {
+      amount: {
+        value: amount,
+        currency: "RUB",
+      },
+      capture: true,
+      confirmation: {
+        type: "redirect",
+        return_url: `${serverBase}/yookassa/success?appUrl=${encodedAppUrl}`,
+      },
+      description,
+      metadata: {
+        userId,
+        plan,
+        userEmail: user.email || "",
+      },
+    };
+
+    const yookassaAuth = btoa(`${YOOKASSA_SHOP_ID}:${YOOKASSA_SECRET_KEY}`);
+    const yookassaResponse = await fetch("https://api.yookassa.ru/v3/payments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${yookassaAuth}`,
+        "Idempotence-Key": idempotenceKey,
+      },
+      body: JSON.stringify(paymentPayload),
+    });
+
+    const paymentData = await yookassaResponse.json();
+
+    if (!yookassaResponse.ok || !paymentData.id) {
+      console.log(`YooKassa error: ${JSON.stringify(paymentData)}`);
+      return c.json({ error: "Не удалось создать платёж в YooKassa" }, 500);
+    }
+
+    // Save order to KV
+    await kv.set(`yookassa-order:${paymentData.id}`, {
+      userId,
+      plan,
+      amount,
+      currency: "RUB",
+      status: paymentData.status,
+      createdAt: new Date().toISOString(),
+      appUrl: appUrl || "",
+      userEmail: user.email || "",
+      yookassaId: paymentData.id,
+    });
+
+    console.log(`YooKassa: payment ${paymentData.id} created for user ${userId}, plan=${plan}`);
+
+    return c.json({
+      paymentUrl: paymentData.confirmation.confirmation_url,
+      paymentId: paymentData.id,
+    });
+  } catch (err) {
+    console.log(`Error initializing YooKassa payment: ${err}`);
+    return c.json({ error: `Error initializing payment: ${err}` }, 500);
+  }
+});
+
+// YooKassa: webhook notification
+app.post("/make-server-279b4dfa/yookassa/webhook", async (c) => {
+  try {
+    const body = await c.req.json();
+    const event = body.event;
+    const payment = body.object;
+
+    console.log(`YooKassa webhook: event=${event}, paymentId=${payment?.id}, status=${payment?.status}`);
+
+    if (event !== "payment.succeeded" || !payment || payment.status !== "succeeded") {
+      return c.json({ received: true });
+    }
+
+    const paymentId = payment.id;
+    const order = await kv.get(`yookassa-order:${paymentId}`);
+
+    if (!order) {
+      console.log(`YooKassa: order not found for paymentId=${paymentId}`);
+      return c.json({ error: "Order not found" }, 404);
+    }
+
+    // Idempotent: if already completed just return OK
+    if (order.status === "succeeded") {
+      return c.json({ received: true });
+    }
+
+    // Grant access
+    const now = new Date();
+    let expiresAt: string | null = null;
+    if (order.plan === "monthly") {
+      const exp = new Date(now);
+      exp.setDate(exp.getDate() + 30);
+      expiresAt = exp.toISOString();
+    }
+
+    await kv.set(`user-access:${order.userId}`, {
+      level: order.plan,
+      grantedAt: now.toISOString(),
+      expiresAt,
+      paidVia: "yookassa",
+      paymentId,
+      amount: payment.amount.value,
+    });
+
+    await kv.set(`yookassa-order:${paymentId}`, {
+      ...order,
+      status: "succeeded",
+      completedAt: now.toISOString(),
+      paidAmount: payment.amount.value,
+    });
+
+    console.log(`YooKassa: access granted for user ${order.userId}, plan=${order.plan}`);
+    return c.json({ received: true });
+  } catch (err) {
+    console.log(`Error processing YooKassa webhook: ${err}`);
+    return c.json({ error: "Internal error" }, 500);
+  }
+});
+
+// YooKassa: SuccessURL — user redirect after payment
+app.get("/make-server-279b4dfa/yookassa/success", (c) => {
+  const appUrl = c.req.query("appUrl") || "";
+  const decodedAppUrl = appUrl ? decodeURIComponent(appUrl) : "";
+  const redirectTo = decodedAppUrl
+    ? `${decodedAppUrl}?payment=success`
+    : `/?payment=success`;
+
+  return c.html(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Оплата прошла успешно</title>
+  <meta http-equiv="refresh" content="3;url=${redirectTo}">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%)}
+    .card{background:#fff;border-radius:20px;padding:2.5rem 2rem;text-align:center;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.08)}
+    .emoji{font-size:4rem;margin-bottom:1rem}
+    h1{color:#16a34a;font-size:1.5rem;margin-bottom:.75rem}
+    p{color:#6b7280;font-size:.9375rem;line-height:1.6;margin-bottom:.75rem}
+    a{display:inline-block;margin-top:.5rem;background:#16a34a;color:#fff;padding:.75rem 1.5rem;border-radius:12px;text-decoration:none;font-weight:600}
+    a:hover{background:#15803d}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="emoji">✅</div>
+    <h1>Оплата прошла!</h1>
+    <p>Доступ к курсу активируется автоматически. Перезайдите в аккаунт.</p>
+    <a href="${redirectTo}">Вернуться в курс</a>
+  </div>
+</body>
+</html>`);
 });
 
 Deno.serve(app.fetch);

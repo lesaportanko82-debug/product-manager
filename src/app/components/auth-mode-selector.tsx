@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
-import { 
-  Eye, UserPlus, LogIn, Brain, BookOpen, Trophy, 
-  Zap, Sparkles, Lock, CheckCircle, ArrowRight 
+import {
+  Eye, UserPlus, LogIn, Brain, BookOpen, Trophy,
+  Zap, Sparkles, Lock, CheckCircle, ArrowRight
 } from "lucide-react";
 
 interface AuthModeSelectorProps {
@@ -111,7 +111,7 @@ export function AuthModeSelector({ onDemoMode, onSignup, onLogin }: AuthModeSele
                   ПОЛНЫЙ ДОСТУП
                 </div>
               </div>
-              
+
               <h3 className="text-xl font-bold mb-2 text-white">
                 Регистрация
               </h3>
