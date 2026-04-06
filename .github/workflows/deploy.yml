@@ -24,13 +24,18 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Verify build output
+        run: |
+          test -f dist/index.html && echo "index.html exists" || (echo "index.html missing" && exit 1)
+
       - name: Deploy to Yandex Object Storage
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_KEY }}
           YC_BUCKET: ${{ secrets.YC_BUCKET }}
+          YC_ENDPOINT: ${{ secrets.YC_ENDPOINT }}
         run: |
           set -euo pipefail
           echo "Deploying to bucket: $YC_BUCKET"
           aws --version
-          aws s3 sync dist/ s3://$YC_BUCKET --delete --endpoint-url=https://storage.yandexcloud.net
+          aws s3 sync dist/ s3://$YC_BUCKET --delete --endpoint-url=$YC_ENDPOINT
