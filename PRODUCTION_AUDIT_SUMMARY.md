@@ -210,4 +210,4 @@ app.use("/make-server-279b4dfa/admin/*", rateLimiter({ maxRequests: 100, windowM
 ---
 
 **Контакт администратора:** [@ohh_lessya](https://t.me/ohh_lessya)  
-**Platform:** product-intensive.com
+**Platform:** www.product-intensive.com

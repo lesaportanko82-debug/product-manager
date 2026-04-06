@@ -9,6 +9,46 @@ import {
 const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
 const SITE_KEY = "super_secret_12345";
 
+/**
+ * Extracts the YooKassa internal payment UUID from the confirmationUrl
+ * (YooKassa puts its own payment ID in the `orderId` query param of the checkout URL)
+ * and persists the mapping ourOrderId → ykPaymentId in sessionStorage so that
+ * payment-success.tsx can do a direct API lookup after the redirect-back.
+ */
+function storeYookassaPaymentId(ourOrderId: string, confirmationUrl: string, responseData: any) {
+  try {
+    // Check if super-task returned the payment ID directly
+    const directId = responseData?.paymentId || responseData?.payment_id || responseData?.id;
+    let ykPaymentId: string | null = null;
+
+    if (directId && /^[0-9a-f-]{36}$/i.test(directId)) {
+      ykPaymentId = directId;
+      console.log(`[paywall] stored YK payment ID (direct): ${directId} for orderId: ${ourOrderId}`);
+    } else {
+      // Extract from YooKassa checkout URL: https://yoomoney.ru/.../contract?orderId={UUID}
+      const ykUrl = new URL(confirmationUrl);
+      const fromUrl = ykUrl.searchParams.get("orderId");
+      if (fromUrl && /^[0-9a-f-]{36}$/i.test(fromUrl)) {
+        ykPaymentId = fromUrl;
+        console.log(`[paywall] stored YK payment ID (from URL): ${fromUrl} for orderId: ${ourOrderId}`);
+      }
+    }
+
+    if (ykPaymentId) {
+      sessionStorage.setItem(`yk-payment:${ourOrderId}`, ykPaymentId);
+    }
+
+    // Always store the latest payment info so payment-success.tsx can recover
+    // even if super-task doesn't include orderId in the return_url
+    sessionStorage.setItem("latest-payment-orderId", ourOrderId);
+    sessionStorage.setItem("latest-payment-ykId",   ykPaymentId ?? "");
+    sessionStorage.setItem("latest-payment-time",   Date.now().toString());
+    console.log(`[paywall] stored latest-payment: orderId=${ourOrderId} ykId=${ykPaymentId}`);
+  } catch (e) {
+    console.warn("[paywall] could not store YK payment ID:", e);
+  }
+}
+
 interface PaywallScreenProps {
   moduleTitle?: string;
   onBack: () => void;
@@ -47,7 +87,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
         plan:        "month",
         userId,
         accessDays:  30,
-        appUrl:      window.location.origin,
+        appUrl:      "https://www.product-intensive.com",
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
@@ -73,6 +113,9 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
       const url = data.confirmationUrl;
       if (!url) throw new Error("confirmationUrl отсутствует в ответе");
 
+      // Extract YooKassa payment UUID from confirmationUrl and store for status lookup on return
+      storeYookassaPaymentId(body.orderId, url, data);
+
       window.location.href = url;
     } catch (err: any) {
       console.error("[paywall-screen] monthly ошибка:", err);
@@ -97,7 +140,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
         plan:        "lifetime",
         userId,
         accessDays:  null,
-        appUrl:      window.location.origin,
+        appUrl:      "https://www.product-intensive.com",
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
@@ -122,6 +165,8 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
 
       const url = data.confirmationUrl;
       if (!url) throw new Error("confirmationUrl отсутствует в ответе");
+
+      storeYookassaPaymentId(body.orderId, url, data);
 
       window.location.href = url;
     } catch (err: any) {
@@ -171,7 +216,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
               <div>
                 <p className="text-white/70 text-[0.75rem] font-medium uppercase tracking-wider">Закрытый раздел</p>
                 <h1 className="text-white font-bold text-[1.125rem] leading-tight mt-0.5">
-                  {moduleTitle ? `«${moduleTitle}��` : "Этот модуль закрыт"}
+                  {moduleTitle ? `«${moduleTitle}` : "Этот модуль закрыт"}
                 </h1>
               </div>
             </div>

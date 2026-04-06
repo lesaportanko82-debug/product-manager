@@ -19,9 +19,9 @@
 - Боевой пароль 2: ROBOKASSA_PASSWORD2
 - Используется SHA-256
 - В Robokassa уже настроены:
-  - Result URL = http://product-intensive.com.website.yandexcloud.net/api/payment/result
-  - Success URL = http://product-intensive.com.website.yandexcloud.net/payment-success
-  - Fail URL = http://product-intensive.com.website.yandexcloud.net/payment-fail
+  - Result URL = https://www.product-intensive.com/api/payment/result
+  - Success URL = https://www.product-intensive.com/payment-success
+  - Fail URL = https://www.product-intensive.com/payment-fail
   - Result URL method = POST
   - Success URL method = GET
   - Fail URL method = GET

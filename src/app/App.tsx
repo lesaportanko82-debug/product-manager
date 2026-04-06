@@ -75,6 +75,13 @@ export default function App() {
     return params.get("invId") || params.get("InvId") || null;
   })[0];
 
+  // orderId is sent by super-task (YooKassa) redirects — always goes to /payment-success
+  // regardless of success or failure; we resolve actual status on that page
+  const paymentOrderId = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("orderId") || params.get("order_id") || null;
+  })[0];
+
   // ─────────────────────────────────────────────────────────────────────────
 
   const [appStep, setAppStep] = useState<"loading" | "auth" | "onboarding" | "welcome" | "course">("loading");
@@ -609,6 +616,7 @@ export default function App() {
     return (
       <PaymentSuccessPage
         invId={paymentInvId}
+        orderId={paymentOrderId}
         onGoToCourse={() => {
           // Navigate to root - will trigger normal auth flow
           window.location.href = "/";

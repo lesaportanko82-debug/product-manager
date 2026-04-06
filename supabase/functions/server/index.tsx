@@ -1127,7 +1127,7 @@ app.post("/make-server-279b4dfa/interview-evaluate", async (c) => {
     "communication": { "score": число, "comment": "комментарий" }
   },
   "strengths": ["сильная сторона 1", "сильная сторона 2"],
-  "improvements": ["что улучшить 1", "что улучшить 2", "что улучшить 3"],
+  "improvements": ["что улучшить 1", "��то улучшить 2", "что улучшить 3"],
   "summary": "Общий вывод 1-2 предложения",
   "sampleAnswer": "Краткий пример сильного ответа (3-4 предложения)"
 }`;
@@ -1512,7 +1512,7 @@ app.post("/make-server-279b4dfa/competency-analysis", async (c) => {
 
     const systemPrompt = `Ты — AI-коуч по продакт-менеджменту. Анализируешь компетенции студента PM-курса и даёшь персонализированные рекомендации.
 
-От��ечай строго JSON:
+От����ечай строго JSON:
 {
   "summary": "1-2 предложения — общая оценка профиля",
   "priorityActions": [
@@ -2377,9 +2377,8 @@ app.get("/make-server-279b4dfa/robokassa/success", (c) => {
   const appUrl = c.req.query("appUrl") || "";
   const invId = c.req.query("invId") || "";
   const decodedAppUrl = appUrl ? decodeURIComponent(appUrl) : "";
-  const redirectTo = decodedAppUrl
-    ? `${decodedAppUrl}?payment=success&invId=${invId}`
-    : `/?payment=success`;
+  const baseUrl = decodedAppUrl || "https://www.product-intensive.com";
+  const redirectTo = `${baseUrl}/payment-success?invId=${invId}`;
 
   return c.html(`<!DOCTYPE html>
 <html lang="ru">
@@ -2415,7 +2414,8 @@ app.get("/make-server-279b4dfa/robokassa/success", (c) => {
 app.get("/make-server-279b4dfa/robokassa/fail", (c) => {
   const appUrl = c.req.query("appUrl") || "";
   const decodedAppUrl = appUrl ? decodeURIComponent(appUrl) : "";
-  const redirectTo = decodedAppUrl ? `${decodedAppUrl}?payment=failed` : `/?payment=failed`;
+  const baseUrl = decodedAppUrl || "https://www.product-intensive.com";
+  const redirectTo = `${baseUrl}/payment-fail`;
 
   return c.html(`<!DOCTYPE html>
 <html lang="ru">
@@ -2491,6 +2491,123 @@ app.get("/make-server-279b4dfa/payment/status", async (c) => {
   } catch (err) {
     console.log(`Error getting payment status: ${err}`);
     return c.json({ error: `Error getting payment status: ${err}` }, 500);
+  }
+});
+
+// Direct YooKassa payment status check by YooKassa payment UUID
+// (extracted from confirmationUrl before redirect and stored in sessionStorage on client)
+app.get("/make-server-279b4dfa/payment/check-yookassa", async (c) => {
+  try {
+    const paymentId = c.req.query("paymentId");
+    if (!paymentId) return c.json({ status: "unknown", error: "paymentId required" });
+
+    const shopId    = Deno.env.get("YOOKASSA_SHOP_ID");
+    const secretKey = Deno.env.get("YOOKASSA_SECRET_KEY");
+    if (!shopId || !secretKey) {
+      console.log("check-yookassa: YooKassa credentials not configured");
+      return c.json({ status: "unknown", error: "YooKassa not configured" });
+    }
+
+    const credentials = btoa(`${shopId}:${secretKey}`);
+    const res = await fetch(`https://api.yookassa.ru/v3/payments/${paymentId}`, {
+      headers: { "Authorization": `Basic ${credentials}`, "Content-Type": "application/json" },
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.log(`check-yookassa: YooKassa API error ${res.status}: ${errBody.slice(0, 200)}`);
+      return c.json({ status: "unknown", error: `YooKassa ${res.status}` });
+    }
+
+    const payment = await res.json();
+    // YooKassa statuses: pending | waiting_for_capture | succeeded | canceled
+    const status =
+      payment.status === "succeeded" || payment.status === "waiting_for_capture" ? "paid"
+      : payment.status === "canceled" ? "failed"
+      : "pending";
+
+    console.log(`check-yookassa: id=${paymentId} yk_status=${payment.status} → ${status}`);
+    return c.json({
+      status,
+      plan: payment.metadata?.plan || payment.metadata?.plan_id || null,
+      yookassaStatus: payment.status,
+    });
+  } catch (err) {
+    console.log(`check-yookassa error: ${err}`);
+    return c.json({ error: `${err}`, status: "unknown" }, 500);
+  }
+});
+
+// Payment status check by orderId (for super-task / YooKassa payments)
+// super-task always redirects to /payment-success?orderId=... regardless of outcome.
+// This endpoint tries to resolve the real status.
+app.get("/make-server-279b4dfa/payment/check-order", async (c) => {
+  try {
+    const orderId = c.req.query("orderId");
+    if (!orderId) return c.json({ status: "unknown" });
+
+    // Try multiple KV key patterns (our server + possible super-task patterns)
+    const keyPatterns = [
+      `yookassa-order:${orderId}`,
+      `robokassa-order:${orderId}`,
+      `payment:${orderId}`,
+      `order:${orderId}`,
+      `super-task:${orderId}`,
+    ];
+    for (const key of keyPatterns) {
+      const order = await kv.get(key);
+      if (order) {
+        const rawStatus = order.status ?? "";
+        const status =
+          rawStatus === "completed" || rawStatus === "succeeded" || rawStatus === "paid"
+            ? "paid"
+            : rawStatus === "pending" || rawStatus === "waiting_for_capture"
+            ? "pending"
+            : rawStatus === "canceled" || rawStatus === "failed" || rawStatus === "cancelled"
+            ? "failed"
+            : "pending";
+        console.log(`check-order: KV hit key=${key} rawStatus=${rawStatus} → ${status}`);
+        return c.json({ status, plan: order.plan || null });
+      }
+    }
+
+    // Fallback: query YooKassa API — search recent payments and match by metadata orderId
+    const shopId = Deno.env.get("YOOKASSA_SHOP_ID");
+    const secretKey = Deno.env.get("YOOKASSA_SECRET_KEY");
+    if (shopId && secretKey) {
+      try {
+        const credentials = btoa(`${shopId}:${secretKey}`);
+        const since = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // last 2h
+        const res = await fetch(
+          `https://api.yookassa.ru/v3/payments?limit=20&created_at.gte=${since}`,
+          { headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/json" } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const match = (data.items || []).find(
+            (p: any) =>
+              p.metadata?.orderId === orderId ||
+              p.metadata?.order_id === orderId ||
+              (p.description && p.description.includes(orderId))
+          );
+          if (match) {
+            const status =
+              match.status === "succeeded" ? "paid" :
+              match.status === "canceled" ? "failed" : "pending";
+            console.log(`check-order: YooKassa API match yookassa_id=${match.id} status=${status}`);
+            return c.json({ status, plan: match.metadata?.plan || null });
+          }
+        }
+      } catch (e) {
+        console.log(`check-order: YooKassa API error: ${e}`);
+      }
+    }
+
+    console.log(`check-order: orderId=${orderId} not found in KV or YooKassa`);
+    return c.json({ status: "unknown" });
+  } catch (err) {
+    console.log(`check-order error: ${err}`);
+    return c.json({ error: `${err}`, status: "unknown" }, 500);
   }
 });
 
@@ -2690,9 +2807,8 @@ app.post("/make-server-279b4dfa/yookassa/webhook", async (c) => {
 app.get("/make-server-279b4dfa/yookassa/success", (c) => {
   const appUrl = c.req.query("appUrl") || "";
   const decodedAppUrl = appUrl ? decodeURIComponent(appUrl) : "";
-  const redirectTo = decodedAppUrl
-    ? `${decodedAppUrl}?payment=success`
-    : `/?payment=success`;
+  const baseUrl = decodedAppUrl || "https://www.product-intensive.com";
+  const redirectTo = `${baseUrl}/payment-success`;
 
   return c.html(`<!DOCTYPE html>
 <html lang="ru">

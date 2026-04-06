@@ -9,6 +9,38 @@ import {
 const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
 const SITE_KEY = "super_secret_12345";
 
+/** Сохраняет YooKassa UUID платежа в sessionStorage для надёжной проверки статуса после возврата */
+function storeYookassaPaymentId(ourOrderId: string, confirmationUrl: string, responseData: any) {
+  try {
+    const directId = responseData?.paymentId || responseData?.payment_id || responseData?.id;
+    let ykPaymentId: string | null = null;
+
+    if (directId && /^[0-9a-f-]{36}$/i.test(directId)) {
+      ykPaymentId = directId;
+      console.log(`[paywall-modal] stored YK payment ID (direct): ${directId}`);
+    } else {
+      const ykUrl = new URL(confirmationUrl);
+      const fromUrl = ykUrl.searchParams.get("orderId");
+      if (fromUrl && /^[0-9a-f-]{36}$/i.test(fromUrl)) {
+        ykPaymentId = fromUrl;
+        console.log(`[paywall-modal] stored YK payment ID (from URL): ${fromUrl}`);
+      }
+    }
+
+    if (ykPaymentId) {
+      sessionStorage.setItem(`yk-payment:${ourOrderId}`, ykPaymentId);
+    }
+
+    // Также сохраняем «последний платёж» — на случай, если super-task не включит orderId в return_url
+    sessionStorage.setItem("latest-payment-orderId", ourOrderId);
+    sessionStorage.setItem("latest-payment-ykId",   ykPaymentId ?? "");
+    sessionStorage.setItem("latest-payment-time",   Date.now().toString());
+    console.log(`[paywall-modal] stored latest-payment: orderId=${ourOrderId} ykId=${ykPaymentId}`);
+  } catch (e) {
+    console.warn("[paywall-modal] could not store YK payment ID:", e);
+  }
+}
+
 interface PaywallModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -51,7 +83,7 @@ export function PaywallModal({
         plan:        "month",
         userId,
         accessDays:  30,
-        appUrl:      window.location.origin,
+        appUrl:      "https://www.product-intensive.com",
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
@@ -80,6 +112,8 @@ export function PaywallModal({
       const url = data.confirmationUrl;
       if (!url) throw new Error("confirmationUrl отсутствует в ответе");
 
+      storeYookassaPaymentId(body.orderId, url, data);
+
       window.location.href = url;
     } catch (err: any) {
       console.error("[payment] monthly ошибка:", err);
@@ -107,7 +141,7 @@ export function PaywallModal({
         plan:        "lifetime",
         userId,
         accessDays:  null,
-        appUrl:      window.location.origin,
+        appUrl:      "https://www.product-intensive.com",
       };
 
       // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
@@ -135,6 +169,8 @@ export function PaywallModal({
 
       const url = data.confirmationUrl;
       if (!url) throw new Error("confirmationUrl отсутствует в ответе");
+
+      storeYookassaPaymentId(body.orderId, url, data);
 
       window.location.href = url;
     } catch (err: any) {
