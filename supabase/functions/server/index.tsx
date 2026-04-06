@@ -2232,8 +2232,8 @@ app.post("/make-server-279b4dfa/robokassa/init", async (c) => {
       return c.json({ error: "Robokassa payment is not configured on the server" }, 500);
     }
 
-    // Amounts (USD). For RUB: use "7000.00"/"9000.00" and remove OutSumCurrency below
-    const amount = plan === "lifetime" ? "90.00" : "70.00";
+    // Amounts in RUB. Боевые цены: месяц = 7000, вечный = 9000
+    const amount = plan === "lifetime" ? "9000.00" : "7000.00";
     const description = plan === "lifetime"
       ? "Вечный доступ к курсу по продакт-менеджменту"
       : "Доступ к курсу по продакт-менеджменту на 30 дней";
@@ -2553,8 +2553,8 @@ app.post("/make-server-279b4dfa/yookassa/init", async (c) => {
       return c.json({ error: "YooKassa payment is not configured on the server" }, 500);
     }
 
-    // Amounts in RUB (временно 100.00 для тестирования)
-    const amount = plan === "lifetime" ? "100.00" : "100.00";
+    // Amounts in RUB. Боевые цены: месяц = 7000, вечный = 9000
+    const amount = plan === "lifetime" ? "9000.00" : "7000.00";
     const description = plan === "lifetime"
       ? "Вечный доступ к курсу по продакт-менеджменту"
       : "Доступ к курсу по продакт-менеджменту на 30 дней";

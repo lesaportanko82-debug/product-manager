@@ -44,7 +44,7 @@ export function PaywallModal({
 
     try {
       const body = {
-        amount:      "100.00",
+        amount:      "7000.00",
         description: "Доступ на месяц",
         orderId:     `month_${Date.now()}`,
         email:       userEmail,
@@ -100,7 +100,7 @@ export function PaywallModal({
 
     try {
       const body = {
-        amount:      "100.00",
+        amount:      "9000.00",
         description: "Вечный доступ",
         orderId:     `lifetime_${Date.now()}`,
         email:       userEmail,

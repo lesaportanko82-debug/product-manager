@@ -40,7 +40,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
 
     try {
       const body = {
-        amount:      "100.00",
+        amount:      "7000.00",
         description: "Доступ на месяц",
         orderId:     `month_${Date.now()}`,
         email:       userEmail,
@@ -90,7 +90,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
 
     try {
       const body = {
-        amount:      "100.00",
+        amount:      "9000.00",
         description: "Вечный доступ",
         orderId:     `lifetime_${Date.now()}`,
         email:       userEmail,
@@ -171,7 +171,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
               <div>
                 <p className="text-white/70 text-[0.75rem] font-medium uppercase tracking-wider">Закрытый раздел</p>
                 <h1 className="text-white font-bold text-[1.125rem] leading-tight mt-0.5">
-                  {moduleTitle ? `«${moduleTitle}»` : "Этот модуль закрыт"}
+                  {moduleTitle ? `«${moduleTitle}��` : "Этот модуль закрыт"}
                 </h1>
               </div>
             </div>
