@@ -2,67 +2,92 @@ name: Deploy to Yandex Object Storage
 
 on:
   push:
-    branches:
-      - main
+    branches: ["main"]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build project
+      - name: Build
         run: npm run build
 
-      - name: Verify build output
+      # 1) Переустанавливаем AWS CLI v2 (официальный инсталлер)
+      - name: Ensure AWS CLI v2
         run: |
-          test -f dist/index.html && echo "index.html exists" || (echo "index.html missing" && exit 1)
-          find dist -maxdepth 2 -type f | sort
+          set -euo pipefail
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          aws --version
 
-      - name: Check secrets presence
+      # 2) Конфиг + “legacy” режим + path-style
+      - name: Configure AWS CLI for Yandex Object Storage
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_KEY }}
-          YC_BUCKET: ${{ secrets.YC_BUCKET }}
-          YC_ENDPOINT: ${{ secrets.YC_ENDPOINT }}
         run: |
-          test -n "$AWS_ACCESS_KEY_ID" && echo "AWS_ACCESS_KEY_ID exists" || (echo "AWS_ACCESS_KEY_ID missing" && exit 1)
-          test -n "$AWS_SECRET_ACCESS_KEY" && echo "AWS_SECRET_ACCESS_KEY exists" || (echo "AWS_SECRET_ACCESS_KEY missing" && exit 1)
-          test -n "$YC_BUCKET" && echo "YC_BUCKET exists" || (echo "YC_BUCKET missing" && exit 1)
-          test -n "$YC_ENDPOINT" && echo "YC_ENDPOINT exists" || (echo "YC_ENDPOINT missing" && exit 1)
+          set -euo pipefail
+          mkdir -p ~/.aws
 
-      - name: Install AWS CLI
-        run: |
-          python -m pip install --upgrade pip
-          pip install awscli
+          cat > ~/.aws/credentials << EOF
+          [default]
+          aws_access_key_id=$AWS_ACCESS_KEY_ID
+          aws_secret_access_key=$AWS_SECRET_ACCESS_KEY
+          EOF
+
+          cat > ~/.aws/config << EOF
+          [default]
+          region = ru-central1
+          s3 =
+            addressing_style = path
+          EOF
+
+          aws configure list
 
       - name: Deploy to Yandex Object Storage
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_KEY }}
-          YC_BUCKET: ${{ secrets.YC_BUCKET }}
-          YC_ENDPOINT: ${{ secrets.YC_ENDPOINT }}
+          BUCKET: ${{ secrets.YC_BUCKET }}
+          ENDPOINT: ${{ secrets.YC_ENDPOINT }}
+          AWS_REGION: ru-central1
+          AWS_DEFAULT_REGION: ru-central1
+
+          # ВАЖНО: гасим новые checksum/behaviors
+          AWS_DEFAULTS_MODE: legacy
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+
+          AWS_EC2_METADATA_DISABLED: "true"
         run: |
           set -euo pipefail
-          echo "Deploying to bucket: $YC_BUCKET"
-          aws --version
-          aws s3 sync dist/ s3://$YC_BUCKET --delete --endpoint-url "$YC_ENDPOINT"
 
-      - name: List bucket root after deploy
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_KEY }}
-          YC_BUCKET: ${{ secrets.YC_BUCKET }}
-          YC_ENDPOINT: ${{ secrets.YC_ENDPOINT }}
-        run: |
-          aws s3 ls s3://$YC_BUCKET --endpoint-url "$YC_ENDPOINT"
+          echo "Deploying to bucket: $BUCKET"
+          echo "Using endpoint: $ENDPOINT"
+          aws --version
+
+          # Проверка доступа
+          aws s3api head-bucket \
+            --bucket "$BUCKET" \
+            --endpoint-url "$ENDPOINT" \
+            --region ru-central1
+
+          # Деплой
+          aws s3 sync ./dist "s3://$BUCKET/" \
+            --delete \
+            --endpoint-url "$ENDPOINT" \
+            --region ru-central1
