@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   Play, ArrowRight, Zap, Brain, BookOpen, CheckCircle2,
-  Clock, BarChart3, FlaskConical, TrendingUp,
+  Clock, BarChart3, FlaskConical, TrendingUp, Monitor,
 } from "lucide-react";
 import { courseModules, getAllLessons } from "./course-data";
 
@@ -53,6 +53,19 @@ export function WelcomeDashboard({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-teal-950/20 dark:to-slate-900 flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
+
+        {/* ── Desktop recommendation banner ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex items-start gap-3 px-4 py-3 mb-5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-700/40"
+        >
+          <Monitor className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-[0.8125rem] text-amber-800 dark:text-amber-300 leading-relaxed">
+            Для максимального комфорта рекомендуем проходить курс с компьютера или ноутбука — так вам будет удобнее работать с материалами и выполнять задания.
+          </p>
+        </motion.div>
 
         {/* ── Badge ── */}
         <motion.div
