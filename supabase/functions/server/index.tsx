@@ -204,6 +204,46 @@ ${userAnswer}`;
   }
 });
 
+// Helper: call OpenAI with automatic Pipedream→direct fallback
+async function callOpenAI(apiKey: string, payload: object): Promise<string> {
+  const PIPEDREAM_URL = "https://eov7cjgjy9fs5pi.m.pipedream.net";
+  const OPENAI_URL   = "https://api.openai.com/v1/chat/completions";
+
+  const headers = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${apiKey}`,
+  };
+  const body = JSON.stringify(payload);
+
+  // Try Pipedream proxy first
+  try {
+    const res = await fetch(PIPEDREAM_URL, { method: "POST", headers, body });
+    if (res.ok) {
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (content) return content;
+      console.log(`Pipedream returned empty content, falling back to direct OpenAI`);
+    } else {
+      const errText = await res.text().catch(() => "");
+      console.log(`Pipedream returned ${res.status}: ${errText} — falling back to direct OpenAI`);
+    }
+  } catch (err) {
+    console.log(`Pipedream fetch error: ${err} — falling back to direct OpenAI`);
+  }
+
+  // Fallback: call OpenAI directly
+  const res2 = await fetch(OPENAI_URL, { method: "POST", headers, body });
+  if (!res2.ok) {
+    const errText = await res2.text().catch(() => "");
+    console.log(`Direct OpenAI error ${res2.status}: ${errText}`);
+    throw new Error(`OpenAI API error: ${res2.status}`);
+  }
+  const data2 = await res2.json();
+  const content2 = data2.choices?.[0]?.message?.content;
+  if (!content2) throw new Error("Empty response from OpenAI");
+  return content2;
+}
+
 // AI Chat Assistant endpoint
 app.post("/make-server-279b4dfa/ai-chat", async (c) => {
   try {
@@ -231,40 +271,55 @@ ${lessonContent ? `\nКонтекст урока (сокращённо):\n${less
 - Приводи примеры из реальных компаний
 - Если вопрос не связан с продакт-менеджментом, вежливо перенаправь к теме курса`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: question },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
+    const answer = await callOpenAI(OPENAI_API_KEY, {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: question },
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.log(`OpenAI API error in ai-chat: ${response.status} ${errText}`);
-      return c.json({ error: `OpenAI API error: ${response.status}` }, 500);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return c.json({ error: "Empty response from OpenAI" }, 500);
-    }
-
-    return c.json({ answer: content });
+    return c.json({ answer });
   } catch (err) {
     console.log(`Error in ai-chat: ${err}`);
     return c.json({ error: `Error in ai-chat: ${err}` }, 500);
+  }
+});
+
+// OpenAI Proxy endpoint — accepts { prompt } and returns { text }
+app.post("/make-server-279b4dfa/openai-proxy", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { prompt } = body;
+
+    if (!prompt || String(prompt).trim().length < 3) {
+      return c.json({ error: "Prompt слишком короткий" }, 400);
+    }
+
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      return c.json({ error: "OpenAI API key not configured" }, 500);
+    }
+
+    const text = await callOpenAI(OPENAI_API_KEY, {
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Ты — AI-ассистент курса по продакт-менеджменту. Отвечай на русском языке. Давай полезные, конкретные ответы с примерами. Отвечай кратко и по делу (3-6 абзацев максимум). Используй продуктовые фреймворки (JTBD, HADI, RICE, TAM/SAM/SOM и т.д.) где уместно.",
+        },
+        { role: "user", content: String(prompt).trim() },
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
+
+    return c.json({ text });
+  } catch (err) {
+    console.log(`Error in openai-proxy: ${err}`);
+    return c.json({ error: `Error in openai-proxy: ${err}` }, 500);
   }
 });
 
@@ -769,7 +824,7 @@ ${levelContext}
 4. Если пользователь застрял — дай мягкую подсказку через наводящий вопрос.
 5. Через 4-6 раундов вопросов, когда контекст достаточен — предложи перейти к анализу (скажи: "У меня достаточно контекста для анализа. Хотите, я подготовлю структурированный разбор?").
 6. Отвечай на русском языке, пиши кратко (2-4 предложения + вопрос).
-7. Будь тёплым, но профессиональным. Не используй markdown-заголовки.
+7. Будь ��ёплым, но профессиональным. Не используй markdown-заголовки.
 8. Начинай с уточнения: кто пользователь продукта, какая проблема, как выглядит текущая ситуация.
 
 ${mode === "analyze" ? `
@@ -795,7 +850,7 @@ ${mode === "roleplay" ? `
 Характер стейкхолдера по ролям:
 - CEO: Фокус на бизнес-результатах, ROI, стратегии роста, конкурентном преимуществе. Задаёшь жёсткие вопросы про unit-экономику, масштабируемость, time-to-market. Нетерпелив — хочешь конкретику.
 - CTO: Фокус на техническом долге, масштабируемости, архитектуре, сроках разработки. Скептичен к фичам без чёткого ТЗ. Спрашиваешь про trade-offs и edge cases.
-- Investor: Фокус на TAM/SAM/SOM, unit-экономике, burnout rate, product-market fit, competitive moat. Хочешь понять 10x potential. Сравниваешь с портфельными компаниями.
+- Investor: Фокус на TAM/SAM/SOM, unit-экономике, burnout rate, product-market fit, competitive moat. Хочешь понять 10x potential. Сравниваешь с портфельными компаниям��.
 - Head_of_Sales: Фокус на том, как продать, какой ICP, conversion rate, sales cycle, objections handling. Прагматичен — спрашиваешь "а клиент за это заплатит?"
 
 ПРАВИЛА ролевой игры:

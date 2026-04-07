@@ -243,26 +243,70 @@ export function AIAssistant({ lessonTitle, lessonContent, moduleTitle }: AIAssis
     setInput("");
     setLoading(true);
 
+    // Build prompt enriched with lesson context if available
+    const prompt = [
+      lessonTitle ? `Текущий урок: ${lessonTitle}` : "",
+      moduleTitle ? `Модуль: ${moduleTitle}` : "",
+      lessonContent ? `Контекст урока (кратко):\n${lessonContent.slice(0, 2000)}` : "",
+      `Вопрос: ${text.trim()}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
     try {
-      const res = await fetch(`${API_BASE}/ai-chat`, {
+      // Primary: /openai-proxy accepts { prompt } → returns { text }
+      const res = await fetch(`${API_BASE}/openai-proxy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-        body: JSON.stringify({
-          question: text.trim(),
-          lessonTitle: lessonTitle || "",
-          lessonContent: lessonContent || "",
-          moduleTitle: moduleTitle || "",
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ prompt }),
       });
+
       const data = await res.json();
-      if (data.error) {
-        setMessages(prev => [...prev, { role: "assistant", content: `Ошибка: ${data.error}` }]);
-      } else {
-        setMessages(prev => [...prev, { role: "assistant", content: cleanAIText(data.answer) }]);
+
+      if (!res.ok || data.error) {
+        // Fallback: /ai-chat accepts { question, lessonTitle, lessonContent, moduleTitle }
+        console.log("openai-proxy failed, falling back to ai-chat:", data.error);
+        const fallbackRes = await fetch(`${API_BASE}/ai-chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({
+            question: text.trim(),
+            lessonTitle: lessonTitle || "",
+            lessonContent: lessonContent || "",
+            moduleTitle: moduleTitle || "",
+          }),
+        });
+        const fallbackData = await fallbackRes.json();
+        if (fallbackData.error) {
+          setMessages(prev => [
+            ...prev,
+            { role: "assistant", content: "Ошибка генерации, попробуйте снова" },
+          ]);
+        } else {
+          setMessages(prev => [
+            ...prev,
+            { role: "assistant", content: cleanAIText(fallbackData.answer) },
+          ]);
+        }
+        return;
       }
+
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: cleanAIText(data.text) },
+      ]);
     } catch (err) {
-      console.log("AI chat error:", err);
-      setMessages(prev => [...prev, { role: "assistant", content: "Не удалось получить ответ. Попробуйте позже." }]);
+      console.log("AI assistant error:", err);
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "Ошибка генерации, попробуйте снова" },
+      ]);
     } finally {
       setLoading(false);
     }

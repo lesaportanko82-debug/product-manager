@@ -27,7 +27,7 @@ export function getOpenAIConfig(): OpenAIConfig {
   return {
     apiKey,
     model: "gpt-4o-mini",
-    baseURL: "https://api.openai.com/v1",
+    baseURL: "https://eov7cjgjy9fs5pi.m.pipedream.net",
     defaultParams: {
       temperature: 0.7,
       maxTokens: 1200,
@@ -41,7 +41,7 @@ export async function checkOpenAIHealth(): Promise<{ ok: boolean; error?: string
   try {
     const config = getOpenAIConfig();
     
-    const response = await fetch(`${config.baseURL}/models`, {
+    const response = await fetch(`${config.baseURL}`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${config.apiKey}`,
