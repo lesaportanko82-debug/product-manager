@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { motion } from "motion/react";
 import {
   Eye, UserPlus, LogIn, Brain, BookOpen, Trophy,
   Zap, Sparkles, Lock, CheckCircle, ArrowRight, Monitor
 } from "lucide-react";
+import { PrivacyPolicyModal } from "./privacy-policy";
 
 interface AuthModeSelectorProps {
   onDemoMode: () => void;
@@ -11,6 +13,7 @@ interface AuthModeSelectorProps {
 }
 
 export function AuthModeSelector({ onDemoMode, onSignup, onLogin }: AuthModeSelectorProps) {
+  const [showPrivacy, setShowPrivacy] = useState(false);
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900 flex items-center justify-center p-4">
       <div className="w-full max-w-5xl">
@@ -229,8 +232,21 @@ export function AuthModeSelector({ onDemoMode, onSignup, onLogin }: AuthModeSele
               <span>Система достижений</span>
             </div>
           </div>
+
+          {/* Footer links */}
+          <div className="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowPrivacy(true)}
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"
+            >
+              Политика конфиденциальности
+            </button>
+          </div>
         </motion.div>
       </div>
+
+      <PrivacyPolicyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </div>
   );
 }

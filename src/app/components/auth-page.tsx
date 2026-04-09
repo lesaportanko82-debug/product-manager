@@ -8,6 +8,7 @@ import {
   BookOpen, Trophy, Brain, Repeat, Bot, Zap, ShieldCheck,
 } from "lucide-react";
 import type { AuthState } from "./auth-modal";
+import { PrivacyPolicyModal } from "./privacy-policy";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 const supabaseUrl = `https://${projectId}.supabase.co`;
@@ -57,6 +58,8 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const resetForm = () => {
     setError("");
@@ -69,6 +72,7 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
   const handleSignUp = useCallback(async () => {
     if (!email || !password) { setError("Заполните email и пароль"); return; }
     if (password.length < 6) { setError("Пароль должен быть минимум 6 символов"); return; }
+    if (!privacyAccepted) { setError("Необходимо принять политику конфиденциальности"); return; }
     setLoading(true);
     setError("");
     try {
@@ -109,7 +113,7 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [email, password, name, onAuth]);
+  }, [email, password, name, onAuth, privacyAccepted]);
 
   const handleSignIn = useCallback(async () => {
     if (!email || !password) { setError("Заполните email и пароль"); return; }
@@ -421,7 +425,7 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
               {/* Submit */}
               <button
                 onClick={mode === "login" ? handleSignIn : mode === "signup" ? handleSignUp : handleForgotPassword}
-                disabled={loading || !!success}
+                disabled={loading || !!success || (mode === "signup" && !privacyAccepted)}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
                   bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[0.9375rem] font-semibold
                   hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed
@@ -437,6 +441,28 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
                   <><KeyRound className="w-4 h-4" /> Сменить пароль</>
                 )}
               </button>
+
+              {/* Privacy checkbox — signup only */}
+              {mode === "signup" && (
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={(e) => { setPrivacyAccepted(e.target.checked); setError(""); }}
+                    className="mt-0.5 w-4 h-4 rounded accent-teal-600 cursor-pointer shrink-0"
+                  />
+                  <span className="text-[0.75rem] text-muted-foreground leading-relaxed">
+                    Я соглашаюсь с{" "}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowPrivacy(true); }}
+                      className="text-teal-600 dark:text-teal-400 hover:underline font-medium"
+                    >
+                      политикой конфиденциальности
+                    </button>
+                  </span>
+                </label>
+              )}
 
               {/* Switch mode */}
               {mode !== "forgot" && (
@@ -471,6 +497,9 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
           </div>
         </motion.div>
       </div>
+
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </div>
   );
 }

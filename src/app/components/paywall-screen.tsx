@@ -4,6 +4,7 @@ import {
   Lock, MessageCircle, Infinity, CheckCircle2, Zap,
   BookOpen, Trophy, Bot, Star, ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle,
 } from "lucide-react";
+import { PrivacyPolicyModal } from "./privacy-policy";
 
 // ─── Прямой вызов super-task (без make-server) ──────────────────────────────
 const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
@@ -68,6 +69,7 @@ const PERKS = [
 export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: PaywallScreenProps) {
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
   const [error, setError]             = useState<string | null>(null);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const handleTelegram = () => window.open("https://t.me/ohh_lessya", "_blank");
 
@@ -353,9 +355,23 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
             <p className="text-center text-[0.6875rem] text-muted-foreground/50 pt-0.5">
               После оплаты перезайдите в аккаунт — доступ активируется автоматически
             </p>
+
+            {/* Privacy policy note */}
+            <p className="text-center text-[0.6875rem] text-muted-foreground/40 pt-1">
+              Нажимая кнопку, вы соглашаетесь с{" "}
+              <button
+                type="button"
+                onClick={() => setShowPrivacy(true)}
+                className="underline hover:text-muted-foreground/70 transition-colors"
+              >
+                политикой конфиденциальности
+              </button>
+            </p>
           </div>
         </motion.div>
       </div>
+
+      <PrivacyPolicyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </div>
   );
 }

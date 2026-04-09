@@ -41,6 +41,7 @@ import { WelcomeDashboard } from "./components/welcome-dashboard";
 import { ModuleIntroScreen } from "./components/module-intro";
 import { PaymentSuccessPage } from "./components/payment-success";
 import { PaymentFailPage } from "./components/payment-fail";
+import { PrivacyPolicyModal } from "./components/privacy-policy";
 import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { fetchUserAccess } from "./components/user-access";
 
@@ -63,6 +64,8 @@ export default function App() {
   // ── Payment route detection ──────────────────────────────────────────────
   // Detect /payment-success and /payment-fail paths BEFORE any auth logic.
   // These standalone pages are shown without requiring login.
+  const isPrivacyPage = window.location.pathname === "/privacy-policy";
+
   const paymentPageType = useState<"success" | "fail" | null>(() => {
     const path = window.location.pathname;
     if (path === "/payment-success") return "success";
@@ -638,6 +641,11 @@ export default function App() {
     );
   }
   // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Privacy Policy standalone page ──────────────────────────────────────
+  if (isPrivacyPage) {
+    return <PrivacyPolicyModal isOpen={true} onClose={() => { window.location.href = "/"; }} />;
+  }
 
   // Loading screen while checking session
   if (appStep === "loading") {
