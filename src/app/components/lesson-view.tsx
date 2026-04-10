@@ -69,6 +69,11 @@ interface LessonViewProps {
   onOpenResumeReview?: () => void;
   onOpenCompetencyRadar?: () => void;
   onOpenOnboarding?: () => void;
+  onOpenGlossary?: () => void;
+  onOpenFlashcards?: () => void;
+  onOpenCertificate?: () => void;
+  accessLevel?: "free" | "monthly" | "lifetime";
+  isDemoMode?: boolean;
 }
 
 function QuizSection({ quiz, title, lessonId, lessonTitle }: { quiz: QuizQuestion[]; title?: string; lessonId: string; lessonTitle: string }) {
@@ -305,7 +310,7 @@ function LessonTOC({ content, containerRef }: { content: string[]; containerRef:
   );
 }
 
-export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggleComplete, onOpenFinalExam, bookmarks, onToggleBookmark, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenOnboarding }: LessonViewProps) {
+export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggleComplete, onOpenFinalExam, bookmarks, onToggleBookmark, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenOnboarding, onOpenGlossary, onOpenFlashcards, onOpenCertificate, accessLevel = "free", isDemoMode = false }: LessonViewProps) {
   const allLessons = getAllLessons();
   const currentIndex = allLessons.findIndex(l => l.lesson.id === lessonId);
   const current = allLessons[currentIndex];
@@ -332,7 +337,7 @@ export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggl
 
   // Show WelcomeView with animated transition
   if (!current) {
-    return <WelcomeView completedLessons={completedLessons} onSelectLesson={onSelectLesson} onOpenFinalExam={onOpenFinalExam} onOpenDiagnostic={onOpenDiagnostic} onOpenCapstone={onOpenCapstone} onOpenCoach={onOpenCoach} onOpenNotebook={onOpenNotebook} onOpenInterview={onOpenInterview} onOpenTemplates={onOpenTemplates} onOpenAnalytics={onOpenAnalytics} onOpenDataExercises={onOpenDataExercises} onOpenPortfolio={onOpenPortfolio} onOpenResumeReview={onOpenResumeReview} onOpenCompetencyRadar={onOpenCompetencyRadar} />;
+    return <WelcomeView completedLessons={completedLessons} onSelectLesson={onSelectLesson} onOpenFinalExam={onOpenFinalExam} onOpenDiagnostic={onOpenDiagnostic} onOpenCapstone={onOpenCapstone} onOpenCoach={onOpenCoach} onOpenNotebook={onOpenNotebook} onOpenInterview={onOpenInterview} onOpenTemplates={onOpenTemplates} onOpenAnalytics={onOpenAnalytics} onOpenDataExercises={onOpenDataExercises} onOpenPortfolio={onOpenPortfolio} onOpenResumeReview={onOpenResumeReview} onOpenCompetencyRadar={onOpenCompetencyRadar} onOpenGlossary={onOpenGlossary} onOpenFlashcards={onOpenFlashcards} onOpenCertificate={onOpenCertificate} onOpenOnboarding={onOpenOnboarding} accessLevel={accessLevel} isDemoMode={isDemoMode} />;
   }
 
   const { module, lesson } = current;
@@ -460,7 +465,7 @@ export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggl
           <LessonTOC content={lesson.content} containerRef={containerRef} />
 
           {/* Interactive content: before */}
-          <FadeIn>{renderInteractiveBlocks(lesson.id, "before")}</FadeIn>
+          <FadeIn>{renderInteractiveBlocks(lesson.id, "before", accessLevel, isDemoMode)}</FadeIn>
 
           {/* Main content */}
           <FadeIn delay={0.05}>
@@ -479,7 +484,7 @@ export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggl
           )}
 
           {/* Interactive content: middle */}
-          <FadeIn>{renderInteractiveBlocks(lesson.id, "middle")}</FadeIn>
+          <FadeIn>{renderInteractiveBlocks(lesson.id, "middle", accessLevel, isDemoMode)}</FadeIn>
 
           {/* Key Points */}
           {lesson.keyPoints && lesson.keyPoints.length > 0 && (
@@ -532,7 +537,7 @@ export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggl
           )}
 
           {/* Interactive content: after */}
-          <FadeIn>{renderInteractiveBlocks(lesson.id, "after")}</FadeIn>
+          <FadeIn>{renderInteractiveBlocks(lesson.id, "after", accessLevel, isDemoMode)}</FadeIn>
 
           {/* Quiz */}
           {lesson.quiz && lesson.quiz.length > 0 && (
@@ -1284,8 +1289,40 @@ const _TOTAL_LESSONS_WV = getAllLessons().length;
 const _TOTAL_QUIZZES_WV = courseModules.reduce((a, m) => a + m.lessons.filter(l => l.quiz && l.quiz.length > 0).length, 0);
 const _TOTAL_PRACTICE_WV = courseModules.reduce((a, m) => a + m.lessons.filter(l => l.practice && l.practice.length > 0).length, 0);
 
-function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar }: { completedLessons: Set<string>, onSelectLesson: (id: string) => void, onOpenFinalExam?: () => void, onOpenDiagnostic?: () => void, onOpenCapstone?: () => void, onOpenCoach?: () => void, onOpenNotebook?: () => void, onOpenInterview?: () => void, onOpenTemplates?: () => void, onOpenAnalytics?: () => void, onOpenDataExercises?: () => void, onOpenPortfolio?: () => void, onOpenResumeReview?: () => void, onOpenCompetencyRadar?: () => void }) {
+// ── ToolCard: locked or normal tool button ────────────────────────────────
+function ToolCard({ icon, title, sub, onClick, hoverCls = "hover:border-teal-200 dark:hover:border-teal-800", iconBg = "bg-teal-50 dark:bg-teal-900/20", locked = false }: { icon: string; title: string; sub: string; onClick?: () => void; hoverCls?: string; iconBg?: string; locked?: boolean }) {
+  if (locked) {
+    return (
+      <div className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-dashed border-border/30 opacity-60 cursor-not-allowed select-none" title="Доступно после оплаты">
+        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center shrink-0 relative">
+          <span className="text-sm opacity-30">{icon}</span>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+          </div>
+        </div>
+        <div>
+          <p className="text-[0.75rem] font-semibold text-muted-foreground/70">{title}</p>
+          <p className="text-[0.625rem] text-muted-foreground/40">🔒 Премиум</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button onClick={onClick} className={`flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:shadow-sm transition-all text-left group ${hoverCls}`}>
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
+        <span className="text-sm">{icon}</span>
+      </div>
+      <div>
+        <p className="text-[0.75rem] font-semibold">{title}</p>
+        <p className="text-[0.625rem] text-muted-foreground/50">{sub}</p>
+      </div>
+    </button>
+  );
+}
+
+function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenOnboarding, accessLevel = "free", isDemoMode = false }: { completedLessons: Set<string>, onSelectLesson: (id: string) => void, onOpenFinalExam?: () => void, onOpenDiagnostic?: () => void, onOpenCapstone?: () => void, onOpenCoach?: () => void, onOpenNotebook?: () => void, onOpenInterview?: () => void, onOpenTemplates?: () => void, onOpenAnalytics?: () => void, onOpenDataExercises?: () => void, onOpenPortfolio?: () => void, onOpenResumeReview?: () => void, onOpenCompetencyRadar?: () => void, onOpenGlossary?: () => void, onOpenFlashcards?: () => void, onOpenCertificate?: () => void, onOpenOnboarding?: () => void, accessLevel?: "free" | "monthly" | "lifetime", isDemoMode?: boolean }) {
   const [dashboardView, setDashboardView] = useState<"list" | "map">("list");
+  const toolsLocked = accessLevel === "free" || !!isDemoMode;
   const totalLessons = _TOTAL_LESSONS_WV;
   const progress = Math.round((completedLessons.size / totalLessons) * 100);
   const totalQuizzes = _TOTAL_QUIZZES_WV;
@@ -1338,6 +1375,107 @@ function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpen
               : "Полный курс по продакт-менеджменту с тестами, практикой и финальным экзаменом"}
           </p>
         </motion.div>
+
+        {/* ═══ FREE TIER PANEL — shown only to demo/free users ═══ */}
+        {toolsLocked && (
+          <FadeIn>
+            <div className="mb-6 rounded-2xl border border-teal-200/70 dark:border-teal-800/40 bg-gradient-to-br from-teal-50/80 via-white to-emerald-50/60 dark:from-teal-950/40 dark:via-slate-900 dark:to-emerald-950/30 overflow-hidden shadow-sm">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-teal-100/60 dark:border-teal-800/30 bg-gradient-to-r from-teal-500 to-emerald-500">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg leading-none">🎁</span>
+                  <div>
+                    <p className="text-sm font-bold text-white leading-tight">Доступно бесплатно</p>
+                    <p className="text-[0.6875rem] text-white/70">Начните прямо сейчас — без оплаты</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onOpenCapstone}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[0.6875rem] font-semibold transition-all"
+                >
+                  Открыть всё <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Free lessons */}
+                <div>
+                  <p className="text-[0.625rem] font-bold text-teal-700 dark:text-teal-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <BookOpen className="w-3 h-3" /> Бесплатные уроки
+                  </p>
+                  <div className="space-y-1.5">
+                    {[
+                      { id: "m1-l1", emoji: "💡", title: "Потребность клиента первична", module: "M1" },
+                      { id: "m1-l2", emoji: "🏢", title: "Customer Obsession в больших компаниях", module: "M1" },
+                      { id: "m1-l3", emoji: "📉", title: "Почему проваливается 90% стартапов", module: "M1" },
+                      { id: "m-sim-l1", emoji: "🎮", title: "Симулятор проектов: 4 сценария", module: "M37" },
+                    ].map(lesson => {
+                      const isDone = completedLessons.has(lesson.id);
+                      return (
+                        <button
+                          key={lesson.id}
+                          onClick={() => onSelectLesson(lesson.id)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-800/60 border border-teal-100/60 dark:border-teal-800/30 hover:border-teal-300 dark:hover:border-teal-600 hover:shadow-sm transition-all text-left group"
+                        >
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm ${isDone ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-teal-50 dark:bg-teal-900/20'}`}>
+                            {isDone ? "✅" : lesson.emoji}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[0.5625rem] font-bold text-teal-600/70 dark:text-teal-400/70 uppercase tracking-wider shrink-0">{lesson.module}</span>
+                              <span className="text-[0.8125rem] font-medium truncate text-slate-800 dark:text-slate-200 group-hover:text-teal-700 dark:group-hover:text-teal-300 transition-colors">{lesson.title}</span>
+                            </div>
+                          </div>
+                          <ArrowRight className="w-3.5 h-3.5 text-teal-400/50 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Free tools */}
+                <div>
+                  <p className="text-[0.625rem] font-bold text-teal-700 dark:text-teal-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Zap className="w-3 h-3" /> Бесплатные инструменты
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { emoji: "📚", label: "Глоссарий", onClick: onOpenGlossary, desc: "120+ терминов" },
+                      { emoji: "🧠", label: "Карточки", onClick: onOpenFlashcards, desc: "Spaced repetition" },
+                      { emoji: "🎮", label: "Симулятор", onClick: () => onSelectLesson("m-sim-l1"), desc: "FreshBite бесплатно" },
+                      { emoji: "🏆", label: "Проекты", onClick: onOpenCapstone, desc: "1 кейс бесплатно" },
+                      { emoji: "📊", label: "Мой уровень", onClick: onOpenDiagnostic, desc: "Junior→Senior" },
+                      { emoji: "🎓", label: "О курсе", onClick: onOpenOnboarding, desc: "Обзор программы" },
+                    ].filter(t => t.onClick).map((tool, i) => (
+                      <button
+                        key={i}
+                        onClick={tool.onClick}
+                        className="flex flex-col items-center gap-1 p-3 rounded-xl bg-white/70 dark:bg-slate-800/60 border border-teal-100/60 dark:border-teal-800/30 hover:border-teal-300 dark:hover:border-teal-600 hover:shadow-sm transition-all group"
+                      >
+                        <span className="text-xl leading-none">{tool.emoji}</span>
+                        <span className="text-[0.6875rem] font-semibold text-slate-700 dark:text-slate-200 group-hover:text-teal-700 dark:group-hover:text-teal-300 transition-colors leading-tight text-center">{tool.label}</span>
+                        <span className="text-[0.5625rem] text-muted-foreground/50 leading-tight text-center">{tool.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Upgrade CTA */}
+                <div className="flex items-center justify-between pt-1 border-t border-teal-100/50 dark:border-teal-800/30">
+                  <p className="text-[0.75rem] text-teal-800/70 dark:text-teal-300/70 font-medium">
+                    🔓 <span className="font-bold">38 модулей</span> и все инструменты — в платном тарифе
+                  </p>
+                  <button
+                    onClick={onOpenCapstone}
+                    className="shrink-0 text-[0.6875rem] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-200 transition-colors"
+                  >
+                    Узнать →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </FadeIn>
+        )}
 
         {/* START button — only for brand-new users with 0 completed lessons */}
         {nextLesson && completedLessons.size === 0 && (
@@ -1523,7 +1661,22 @@ function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpen
         {onOpenCoach && (
           <FadeIn>
             <div className="mb-4">
-              <PMCoachWidget onOpenCoach={onOpenCoach} />
+              {toolsLocked ? (
+                <div className="flex items-center gap-3 p-4 bg-card rounded-2xl border border-dashed border-border/30 opacity-60 cursor-not-allowed select-none" title="Доступно после оплаты">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center shrink-0 relative">
+                    <span className="text-xl opacity-30">🦉</span>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Lock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[0.8125rem] font-semibold text-muted-foreground/70">PM-Коуч</p>
+                    <p className="text-[0.75rem] text-muted-foreground/40">🔒 Разбор кейса + защита перед стейкхолдерами — после оплаты</p>
+                  </div>
+                </div>
+              ) : (
+                <PMCoachWidget onOpenCoach={onOpenCoach} />
+              )}
             </div>
           </FadeIn>
         )}
@@ -1541,46 +1694,25 @@ function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpen
         <FadeIn delay={0.12}>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
             {onOpenInterview && (
-              <button onClick={onOpenInterview} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-amber-200 hover:shadow-sm transition-all text-left group dark:hover:border-amber-800">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center shrink-0"><span className="text-sm">🎤</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Интервью</p><p className="text-[0.625rem] text-muted-foreground/50">Симулятор</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="🎤" title="Интервью" sub="Симулятор" onClick={onOpenInterview} hoverCls="hover:border-amber-200 dark:hover:border-amber-800" iconBg="bg-amber-50 dark:bg-amber-900/20" />
             )}
             {onOpenTemplates && (
-              <button onClick={onOpenTemplates} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-teal-200 hover:shadow-sm transition-all text-left group dark:hover:border-teal-800">
-                <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/20 flex items-center justify-center shrink-0"><span className="text-sm">📋</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Шаблоны</p><p className="text-[0.625rem] text-muted-foreground/50">PM-артефакты</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="📋" title="Шаблоны" sub="PM-артефакты" onClick={onOpenTemplates} hoverCls="hover:border-teal-200 dark:hover:border-teal-800" iconBg="bg-teal-50 dark:bg-teal-900/20" />
             )}
             {onOpenAnalytics && (
-              <button onClick={onOpenAnalytics} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-cyan-200 hover:shadow-sm transition-all text-left group dark:hover:border-cyan-800">
-                <div className="w-8 h-8 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 flex items-center justify-center shrink-0"><span className="text-sm">📊</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Аналитика</p><p className="text-[0.625rem] text-muted-foreground/50">Дашборд</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="📊" title="Аналитика" sub="Дашборд" onClick={onOpenAnalytics} hoverCls="hover:border-cyan-200 dark:hover:border-cyan-800" iconBg="bg-cyan-50 dark:bg-cyan-900/20" />
             )}
             {onOpenDataExercises && (
-              <button onClick={onOpenDataExercises} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-emerald-200 hover:shadow-sm transition-all text-left group dark:hover:border-emerald-800">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center shrink-0"><span className="text-sm">🧮</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Задачи</p><p className="text-[0.625rem] text-muted-foreground/50">Real Data</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="🧮" title="Задачи" sub="Real Data" onClick={onOpenDataExercises} hoverCls="hover:border-emerald-200 dark:hover:border-emerald-800" iconBg="bg-emerald-50 dark:bg-emerald-900/20" />
             )}
             {onOpenPortfolio && (
-              <button onClick={onOpenPortfolio} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-violet-200 hover:shadow-sm transition-all text-left group dark:hover:border-violet-800">
-                <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center shrink-0"><span className="text-sm">💼</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Портфолио</p><p className="text-[0.625rem] text-muted-foreground/50">PM-профиль</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="💼" title="Портфолио" sub="PM-профиль" onClick={onOpenPortfolio} hoverCls="hover:border-violet-200 dark:hover:border-violet-800" iconBg="bg-violet-50 dark:bg-violet-900/20" />
             )}
             {onOpenResumeReview && (
-              <button onClick={onOpenResumeReview} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-pink-200 hover:shadow-sm transition-all text-left group dark:hover:border-pink-800">
-                <div className="w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-900/20 flex items-center justify-center shrink-0"><span className="text-sm">📄</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Резюме AI</p><p className="text-[0.625rem] text-muted-foreground/50">Проверка CV</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="📄" title="Резюме AI" sub="Проверка CV" onClick={onOpenResumeReview} hoverCls="hover:border-pink-200 dark:hover:border-pink-800" iconBg="bg-pink-50 dark:bg-pink-900/20" />
             )}
             {onOpenCompetencyRadar && (
-              <button onClick={onOpenCompetencyRadar} className="flex items-center gap-2.5 p-3 bg-card rounded-xl border border-border/40 hover:border-blue-200 hover:shadow-sm transition-all text-left group dark:hover:border-blue-800">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0"><span className="text-sm">🎯</span></div>
-                <div><p className="text-[0.75rem] font-semibold">Компетенции</p><p className="text-[0.625rem] text-muted-foreground/50">PM Radar</p></div>
-              </button>
+              <ToolCard locked={toolsLocked} icon="🎯" title="Компетенции" sub="PM Radar" onClick={onOpenCompetencyRadar} hoverCls="hover:border-blue-200 dark:hover:border-blue-800" iconBg="bg-blue-50 dark:bg-blue-900/20" />
             )}
           </div>
         </FadeIn>
@@ -1752,6 +1884,28 @@ function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpen
               {/* Final Exam Card */}
               {onOpenFinalExam && (() => {
                 const allModulesComplete = courseModules.every(m => m.lessons.every(l => completedLessons.has(l.id)));
+                if (toolsLocked) {
+                  return (
+                    <FadeIn>
+                      <div
+                        className="w-full rounded-xl border border-dashed border-border/30 p-4 flex items-center gap-4 opacity-50 cursor-not-allowed select-none bg-slate-50 dark:bg-slate-800/20"
+                        title="Доступно после оплаты"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center shrink-0 relative">
+                          <Award className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                          <div className="absolute inset-0 flex items-center justify-center rounded-xl">
+                            <Lock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-[0.875rem] font-semibold text-muted-foreground/60">Финальный экзамен</h4>
+                          <p className="text-[0.75rem] text-muted-foreground/40">🔒 Доступно после оплаты полного доступа</p>
+                        </div>
+                        <Lock className="w-4 h-4 text-slate-300 shrink-0" />
+                      </div>
+                    </FadeIn>
+                  );
+                }
                 return (
                   <FadeIn>
                     <button

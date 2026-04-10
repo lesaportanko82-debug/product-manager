@@ -47,12 +47,13 @@ import { fetchUserAccess } from "./components/user-access";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 
-// First 3 lessons of module 1 are free + entire analytics module (m-analytics with 9 lessons)
+// First 3 lessons of module 1 are free + entire analytics module (m-analytics with 9 lessons) + simulator lesson
 const FREE_LESSON_IDS = new Set([
   "m1-l1", "m1-l2", "m1-l3",
   "m-analytics-l1", "m-analytics-l2", "m-analytics-l3",
   "m-analytics-l4", "m-analytics-l5", "m-analytics-l6",
   "m-analytics-l7", "m-analytics-l8", "m-analytics-l9",
+  "m-sim-l1",
 ]);
 
 // 🔓 TEMPORARY TESTING FLAG — set to false to restore paywall
@@ -544,7 +545,7 @@ export default function App() {
       case "certificate":
         return <Certificate completedLessons={completedLessons} examScore={examScore} onClose={() => setView("lesson")} />;
       case "capstone":
-        return <CapstoneProjectsView onClose={() => setView("lesson")} />;
+        return <CapstoneProjectsView onClose={() => setView("lesson")} accessLevel={accessLevel} isDemoMode={isDemoMode} />;
       case "diagnostic":
         return (
           <div className="flex-1 min-h-screen max-h-screen overflow-y-auto bg-gradient-to-br from-slate-200 via-slate-100 to-teal-100/50 dark:from-slate-900 dark:via-slate-800 dark:to-teal-950/50">
@@ -609,6 +610,11 @@ export default function App() {
             onOpenResumeReview={() => setView("resume-review")}
             onOpenCompetencyRadar={() => setView("competency-radar")}
             onOpenOnboarding={handleOpenOnboarding}
+            onOpenGlossary={() => setView("glossary")}
+            onOpenFlashcards={() => setView("flashcards")}
+            onOpenCertificate={() => setView("certificate")}
+            accessLevel={canAccessPaidContent ? accessLevel : "free"}
+            isDemoMode={isDemoMode}
           />
         );
     }
@@ -777,37 +783,7 @@ export default function App() {
         onOpenGlossary={() => setView("glossary")}
         onOpenFlashcards={() => setView("flashcards")}
         onOpenCertificate={() => setView("certificate")}
-        onOpenCapstone={() => setView("capstone")}
-        onOpenDiagnostic={() => setView("diagnostic")}
-        onOpenCoach={() => setView("pm-coach")}
-        onOpenNotebook={() => setView("notebook")}
-        onOpenInterview={() => setView("interview")}
-        onOpenTemplates={() => setView("templates")}
-        onOpenAnalytics={() => setView("analytics")}
-        onOpenDataExercises={() => setView("data-exercises")}
-        onOpenPortfolio={() => setView("portfolio")}
-        onOpenResumeReview={() => setView("resume-review")}
-        onOpenCompetencyRadar={() => setView("competency-radar")}
-        onOpenOnboarding={handleOpenOnboarding}
-        isDark={isDark}
-        onToggleDark={toggleDark}
-        authState={authState}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onSignOut={() => {
-          clearAllLocalData();
-          signOut();
-          setCanAccessPaidContent(false);
-          setAccessLevel("free");
-          setAppStep("auth");
-          try { localStorage.removeItem("course-started"); } catch {}
-          try { localStorage.removeItem("auth-state"); } catch {}
-        }}
-        onOpenProfile={() => setShowProfileCabinet(true)}
-        onNameChange={(newName) => {
-          // Sync name to authState so SyncStatusBadge and ProfileCabinet stay in sync
-          updateAuth({ ...authState, name: newName });
-        }}
-        examScore={examScore}
+        isDemoMode={isDemoMode}
       />
       <main className="flex-1 min-w-0 overflow-hidden relative">
         {/* Robokassa payment result banner */}

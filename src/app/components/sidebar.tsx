@@ -60,11 +60,17 @@ interface SidebarProps {
   accessLevel?: "free" | "monthly" | "lifetime";
   freeLessonIds?: Set<string>;
   examScore?: number | null;
+  isDemoMode?: boolean;
 }
 
-export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOpenFinalExam, showFinalExam, bookmarks, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenLeaderboard, onOpenOnboarding, onOpenCapstone, onOpenDiagnostic, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, isDark, onToggleDark, authState, onOpenAuth, onSignOut, onOpenProfile, onNameChange, accessLevel = "free", freeLessonIds, examScore = null }: SidebarProps) {
+export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOpenFinalExam, showFinalExam, bookmarks, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenLeaderboard, onOpenOnboarding, onOpenCapstone, onOpenDiagnostic, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, isDark, onToggleDark, authState, onOpenAuth, onSignOut, onOpenProfile, onNameChange, accessLevel = "free", freeLessonIds, examScore = null, isDemoMode = false }: SidebarProps) {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(
-    new Set([courseModules[0]?.id].filter(Boolean))
+    // For free/demo users: also pre-expand the simulator module so it's immediately visible
+    () => {
+      const defaults = [courseModules[0]?.id].filter(Boolean) as string[];
+      if (accessLevel === "free" || isDemoMode) defaults.push("m-sim");
+      return new Set(defaults);
+    }
   );
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -168,7 +174,10 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
   const progressPct = totalLessons > 0 ? Math.round((completedLessons.size / totalLessons) * 100) : 0;
 
   // 11 logical blocks of the course
-  const [expandedBlocks, setExpandedBlocks] = useState<Set<number>>(() => new Set([0]));
+  const [expandedBlocks, setExpandedBlocks] = useState<Set<number>>(
+    // For free/demo users: also expand the last block (Капстон, index 10) so the simulator is visible
+    () => (accessLevel === "free" || isDemoMode) ? new Set([0, 10]) : new Set([0])
+  );
 
   const toggleBlock = (blockIndex: number) => {
     setExpandedBlocks(prev => {
@@ -238,24 +247,24 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
   }, [completedLessons.size, totalLessons, examScore]);
 
   // Tools config
+  const toolsLocked = accessLevel === "free" || !!isDemoMode;
   const tools = [
-    onOpenGlossary && { icon: BookOpen, label: "Глоссарий", onClick: onOpenGlossary, color: "teal" },
-    onOpenFlashcards && { icon: Brain, label: "Карточки", onClick: onOpenFlashcards, color: "teal" },
-    onOpenCertificate && { icon: GraduationCap, label: "Сертификат", onClick: onOpenCertificate, color: "teal" },
-    onOpenLeaderboard && { icon: Trophy, label: "Рейтинг", onClick: onOpenLeaderboard, color: "amber" },
-    onOpenCapstone && { icon: Briefcase, label: "Проекты", onClick: onOpenCapstone, color: "violet" },
-    onOpenDiagnostic && { icon: Brain, label: "Уровень", onClick: onOpenDiagnostic, color: "indigo" },
-    onOpenOnboarding && { icon: Compass, label: "О курсе", onClick: onOpenOnboarding, color: "cyan" },
-    onOpenCoach && { icon: MessageCircle, label: "PM-Коуч", onClick: onOpenCoach, color: "violet" },
-    onOpenNotebook && { icon: FileText, label: "Тетрадь", onClick: onOpenNotebook, color: "teal" },
-    onOpenInterview && { icon: Mic, label: "Интервью", onClick: onOpenInterview, color: "amber" },
-    onOpenTemplates && { icon: Layers, label: "Шаблоны", onClick: onOpenTemplates, color: "teal" },
-    onOpenAnalytics && { icon: BarChart3, label: "Аналитика", onClick: onOpenAnalytics, color: "cyan" },
-    onOpenDataExercises && { icon: ClipboardList, label: "Задачи на данных", onClick: onOpenDataExercises, color: "emerald" },
-    onOpenPortfolio && { icon: Briefcase, label: "Портфолио", onClick: onOpenPortfolio, color: "violet" },
-    onOpenResumeReview && { icon: User, label: "Резюме AI", onClick: onOpenResumeReview, color: "pink" },
-    onOpenCompetencyRadar && { icon: Target, label: "Компетенции", onClick: onOpenCompetencyRadar, color: "blue" },
-  ].filter(Boolean) as { icon: React.ElementType; label: string; onClick: () => void; color: string }[];
+    onOpenGlossary && { icon: BookOpen, label: "Глоссарий", onClick: onOpenGlossary, color: "teal", locked: false },
+    onOpenFlashcards && { icon: Brain, label: "Карточки", onClick: onOpenFlashcards, color: "teal", locked: false },
+    onOpenCertificate && { icon: GraduationCap, label: "Сертифи...", onClick: onOpenCertificate, color: "teal", locked: false },
+    onOpenCapstone && { icon: Briefcase, label: "Проекты", onClick: onOpenCapstone, color: "violet", locked: false },
+    onOpenDiagnostic && { icon: Brain, label: "Уровень", onClick: onOpenDiagnostic, color: "indigo", locked: false },
+    onOpenOnboarding && { icon: Compass, label: "О курсе", onClick: onOpenOnboarding, color: "cyan", locked: false },
+    onOpenCoach && { icon: MessageCircle, label: "PM-Коуч", onClick: onOpenCoach, color: "violet", locked: toolsLocked },
+    onOpenNotebook && { icon: FileText, label: "Тетрадь", onClick: onOpenNotebook, color: "teal", locked: toolsLocked },
+    onOpenInterview && { icon: Mic, label: "Интервью", onClick: onOpenInterview, color: "amber", locked: toolsLocked },
+    onOpenTemplates && { icon: Layers, label: "Шаблоны", onClick: onOpenTemplates, color: "teal", locked: toolsLocked },
+    onOpenAnalytics && { icon: BarChart3, label: "Аналитика", onClick: onOpenAnalytics, color: "cyan", locked: toolsLocked },
+    onOpenDataExercises && { icon: ClipboardList, label: "Задачи н...", onClick: onOpenDataExercises, color: "emerald", locked: toolsLocked },
+    onOpenPortfolio && { icon: Briefcase, label: "Портфол...", onClick: onOpenPortfolio, color: "violet", locked: toolsLocked },
+    onOpenResumeReview && { icon: User, label: "Резюме AI", onClick: onOpenResumeReview, color: "pink", locked: toolsLocked },
+    onOpenCompetencyRadar && { icon: Target, label: "Компете...", onClick: onOpenCompetencyRadar, color: "blue", locked: toolsLocked },
+  ].filter(Boolean) as { icon: React.ElementType; label: string; onClick: () => void; color: string; locked: boolean }[];
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -563,14 +572,17 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
                           const pctModule = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
                           const ModIcon = iconMap[module.icon] || BookOpen;
 
-                          const isUnlocked = accessLevel !== "free"
-                            ? true
-                            : isModuleUnlocked(module, completedLessons);
                           // Module is paid-locked only if it has NO free lessons at all
                           const hasAnyFreeLesson = freeLessonIds
                             ? module.lessons.some(l => freeLessonIds.has(l.id))
                             : true;
                           const isPaidLocked = accessLevel === "free" && !!freeLessonIds && !hasAnyFreeLesson;
+
+                          // A module with at least one free lesson is always "unlocked" (expandable),
+                          // even if sequential unlock hasn't been reached yet
+                          const isUnlocked = accessLevel !== "free"
+                            ? true
+                            : (hasAnyFreeLesson || isModuleUnlocked(module, completedLessons));
 
                           return (
                             <div key={module.id}>
@@ -745,7 +757,24 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
                       indigo: "hover:text-indigo-700 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30",
                       cyan: "hover:text-cyan-700 dark:hover:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/30",
                       blue: "hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30",
+                      emerald: "hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30",
+                      pink: "hover:text-pink-700 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/30",
                     };
+                    if (tool.locked) {
+                      return (
+                        <div
+                          key={i}
+                          title="Доступно после оплаты"
+                          className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg text-muted-foreground/30 opacity-50 cursor-not-allowed select-none relative"
+                        >
+                          <div className="relative">
+                            <TIcon className="w-3.5 h-3.5" />
+                            <Lock className="absolute -top-1.5 -right-1.5 w-2 h-2 text-slate-400 dark:text-slate-500" />
+                          </div>
+                          <span className="text-[0.625rem] leading-tight truncate w-full text-center">{tool.label}</span>
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={i}
@@ -767,17 +796,28 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
         {/* Final Exam */}
         {onOpenFinalExam && (
           <div className="px-3 pb-1.5">
-            <button
-              onClick={() => { onOpenFinalExam(); setMobileOpen(false); }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-[0.8125rem] ${
-                showFinalExam
-                  ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-sm shadow-teal-100 dark:shadow-teal-900/30'
-                  : 'bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 text-teal-700 dark:text-teal-300 hover:from-teal-100 hover:to-emerald-100 dark:hover:from-teal-900/40 dark:hover:to-emerald-900/30'
-              }`}
-            >
-              <Award className={`w-4 h-4 shrink-0 ${showFinalExam ? 'text-teal-200' : ''}`} />
-              <span className="font-semibold truncate">Финальный экзамен</span>
-            </button>
+            {toolsLocked ? (
+              <div
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[0.8125rem] opacity-50 cursor-not-allowed select-none border border-dashed border-border/30 bg-muted/30"
+                title="Доступно после оплаты"
+              >
+                <Lock className="w-4 h-4 shrink-0 text-muted-foreground/50" />
+                <span className="font-semibold truncate text-muted-foreground/60">Финальный экзамен</span>
+                <span className="ml-auto text-[0.5625rem] text-muted-foreground/40 font-medium shrink-0">🔒 Премиум</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => { onOpenFinalExam(); setMobileOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-[0.8125rem] ${
+                  showFinalExam
+                    ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-sm shadow-teal-100 dark:shadow-teal-900/30'
+                    : 'bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 text-teal-700 dark:text-teal-300 hover:from-teal-100 hover:to-emerald-100 dark:hover:from-teal-900/40 dark:hover:to-emerald-900/30'
+                }`}
+              >
+                <Award className={`w-4 h-4 shrink-0 ${showFinalExam ? 'text-teal-200' : ''}`} />
+                <span className="font-semibold truncate">Финальный экзамен</span>
+              </button>
+            )}
           </div>
         )}
 

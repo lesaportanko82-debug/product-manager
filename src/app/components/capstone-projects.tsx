@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronRight, Trophy, Target, BarChart3, Rocket,
   CheckCircle2, ArrowRight, X,
-  Briefcase, Calculator, Award
+  Briefcase, Calculator, Award, Lock
 } from "lucide-react";
 
 // ===== Project Definitions =====
@@ -110,9 +110,10 @@ function saveResult(projectId: string, fields: Record<string, string>) {
 }
 
 // ===== Main Capstone Component =====
-export function CapstoneProjectsView({ onClose }: { onClose: () => void }) {
+export function CapstoneProjectsView({ onClose, accessLevel = "free", isDemoMode = false }: { onClose: () => void; accessLevel?: "free" | "monthly" | "lifetime"; isDemoMode?: boolean }) {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [savedResults, setSavedResults] = useState(loadResults);
+  const toolsLocked = accessLevel === "free" || !!isDemoMode;
 
   const project = CAPSTONE_PROJECTS.find(p => p.id === selectedProject);
 
@@ -183,6 +184,8 @@ export function CapstoneProjectsView({ onClose }: { onClose: () => void }) {
           {CAPSTONE_PROJECTS.map((proj, i) => {
             const Icon = proj.icon;
             const isCompleted = !!savedResults[proj.id];
+            // First project is always free; rest locked for free/demo
+            const isLocked = toolsLocked && i > 0;
 
             return (
               <motion.div
@@ -191,35 +194,68 @@ export function CapstoneProjectsView({ onClose }: { onClose: () => void }) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
               >
-                <button
-                  onClick={() => setSelectedProject(proj.id)}
-                  className="w-full text-left rounded-2xl border p-5 transition-all group bg-card border-border/40 hover:border-teal-200 hover:shadow-sm dark:hover:border-teal-700"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className={`w-11 h-11 rounded-xl ${proj.bg} flex items-center justify-center shrink-0 dark:bg-opacity-20`}>
-                      <Icon className={`w-5 h-5 ${proj.color}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[0.625rem] text-muted-foreground/50 font-medium uppercase tracking-wider">{proj.afterModules}</span>
-                        {isCompleted && (
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[0.5625rem] font-semibold flex items-center gap-1 dark:bg-emerald-900/30 dark:text-emerald-400">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            Завершён
-                          </span>
-                        )}
-                        {isCompleted && (
-                          <span className="text-[0.5625rem] text-amber-600 font-medium dark:text-amber-400">
-                            🌰 +{proj.xpReward}
-                          </span>
-                        )}
+                {isLocked ? (
+                  <div
+                    className="w-full text-left rounded-2xl border p-5 bg-card border-dashed border-border/30 opacity-60 cursor-not-allowed select-none"
+                    title="Доступно после оплаты"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center shrink-0 relative">
+                        <Icon className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                        <div className="absolute inset-0 flex items-center justify-center rounded-xl">
+                          <Lock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                        </div>
                       </div>
-                      <h3 className="text-[0.9375rem] font-semibold mb-1">{proj.title}</h3>
-                      <p className="text-[0.75rem] text-muted-foreground/60 leading-relaxed">{proj.description}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[0.625rem] text-muted-foreground/40 font-medium uppercase tracking-wider">{proj.afterModules}</span>
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded-full text-[0.5625rem] font-semibold flex items-center gap-1 dark:bg-slate-800/50 dark:text-slate-500">
+                            <Lock className="w-2.5 h-2.5" />
+                            Премиум
+                          </span>
+                        </div>
+                        <h3 className="text-[0.9375rem] font-semibold mb-1 text-muted-foreground/60">{proj.title}</h3>
+                        <p className="text-[0.75rem] text-muted-foreground/40 leading-relaxed">{proj.description}</p>
+                      </div>
+                      <Lock className="w-4 h-4 text-muted-foreground/20 shrink-0 mt-2" />
                     </div>
-                    <ArrowRight className="w-4 h-4 text-muted-foreground/20 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
                   </div>
-                </button>
+                ) : (
+                  <button
+                    onClick={() => setSelectedProject(proj.id)}
+                    className="w-full text-left rounded-2xl border p-5 transition-all group bg-card border-border/40 hover:border-teal-200 hover:shadow-sm dark:hover:border-teal-700"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`w-11 h-11 rounded-xl ${proj.bg} flex items-center justify-center shrink-0 dark:bg-opacity-20`}>
+                        <Icon className={`w-5 h-5 ${proj.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[0.625rem] text-muted-foreground/50 font-medium uppercase tracking-wider">{proj.afterModules}</span>
+                          {i === 0 && toolsLocked && (
+                            <span className="px-2 py-0.5 bg-teal-50 text-teal-600 rounded-full text-[0.5625rem] font-semibold dark:bg-teal-900/30 dark:text-teal-400">
+                              🆓 Бесплатно
+                            </span>
+                          )}
+                          {isCompleted && (
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[0.5625rem] font-semibold flex items-center gap-1 dark:bg-emerald-900/30 dark:text-emerald-400">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              Завершён
+                            </span>
+                          )}
+                          {isCompleted && (
+                            <span className="text-[0.5625rem] text-amber-600 font-medium dark:text-amber-400">
+                              🌰 +{proj.xpReward}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-[0.9375rem] font-semibold mb-1">{proj.title}</h3>
+                        <p className="text-[0.75rem] text-muted-foreground/60 leading-relaxed">{proj.description}</p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-muted-foreground/20 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
+                    </div>
+                  </button>
+                )}
               </motion.div>
             );
           })}

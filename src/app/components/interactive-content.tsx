@@ -3059,10 +3059,10 @@ for (const key of Object.keys(lessonInteractiveContent)) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ===== Render helper =====
-export function renderInteractiveBlocks(lessonId: string, position: "before" | "after" | "middle"): React.ReactNode {
+export function renderInteractiveBlocks(lessonId: string, position: "before" | "after" | "middle", accessLevel?: "free" | "monthly" | "lifetime", isDemoMode?: boolean): React.ReactNode {
   // Special: render ProjectSimulator for the simulator lesson
   if (lessonId === "m-sim-l1" && position === "after") {
-    return <ProjectSimulator />;
+    return <ProjectSimulator accessLevel={accessLevel ?? "free"} isDemoMode={isDemoMode ?? false} />;
   }
 
   const allBlocks = lessonInteractiveContent[lessonId];

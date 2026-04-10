@@ -1017,19 +1017,25 @@ export function getSimulatorStats(): { completed: number; total: number; bestSco
 }
 
 // ===== Main Component =====
-export function ProjectSimulator() {
+export function ProjectSimulator({ accessLevel = "free", isDemoMode = false }: { accessLevel?: "free" | "monthly" | "lifetime"; isDemoMode?: boolean }) {
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
+  const isPaidUser = accessLevel !== "free" && !isDemoMode;
+
+  const handleSelect = (id: string) => {
+    if (id !== "freshbite" && !isPaidUser) return;
+    setSelectedScenario(id);
+  };
 
   if (!selectedScenario) {
-    return <ScenarioSelector onSelect={setSelectedScenario} />;
+    return <ScenarioSelector onSelect={handleSelect} isPaidUser={isPaidUser} />;
   }
 
   const scenario = ALL_SCENARIOS.find(s => s.id === selectedScenario)!;
-  return <SimulatorEngine key={selectedScenario} scenario={scenario} onBack={() => setSelectedScenario(null)} onSelectScenario={setSelectedScenario} />;
+  return <SimulatorEngine key={selectedScenario} scenario={scenario} onBack={() => setSelectedScenario(null)} onSelectScenario={(id) => { if (id !== "freshbite" && !isPaidUser) return; setSelectedScenario(id); }} />;
 }
 
 // ===== Scenario Selector =====
-function ScenarioSelector({ onSelect }: { onSelect: (id: string) => void }) {
+function ScenarioSelector({ onSelect, isPaidUser = true }: { onSelect: (id: string) => void; isPaidUser?: boolean }) {
   const results = getResults();
   const completedCount = Object.keys(results).length;
   const bestScore = Object.values(results).length > 0 ? Math.max(...Object.values(results)) : 0;
@@ -1094,46 +1100,72 @@ function ScenarioSelector({ onSelect }: { onSelect: (id: string) => void }) {
           const result = results[scenario.id];
           const isCompleted = result !== undefined;
           const totalQ = scenario.phases.reduce((a, p) => a + p.questions.length, 0);
+          const isLocked = !isPaidUser && scenario.id !== "freshbite";
 
           return (
             <button
               key={scenario.id}
-              onClick={() => onSelect(scenario.id)}
-              className="w-full text-left rounded-xl border border-border/40 p-5 transition-all hover:border-teal-200 hover:shadow-md group bg-gradient-to-br from-white to-slate-50/80"
+              onClick={() => !isLocked && onSelect(scenario.id)}
+              disabled={isLocked}
+              className={`w-full text-left rounded-xl border p-5 transition-all group bg-gradient-to-br ${
+                isLocked
+                  ? "border-border/20 from-slate-50 to-slate-100/80 opacity-70 cursor-not-allowed"
+                  : "border-border/40 from-white to-slate-50/80 hover:border-teal-200 hover:shadow-md cursor-pointer"
+              }`}
             >
               <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${scenario.bgGradient} flex items-center justify-center shrink-0 shadow-sm`}>
-                  <Icon className="w-6 h-6 text-white" />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                  isLocked
+                    ? "bg-slate-200 dark:bg-slate-700"
+                    : `bg-gradient-to-br ${scenario.bgGradient}`
+                }`}>
+                  {isLocked
+                    ? <Shield className="w-6 h-6 text-slate-400 dark:text-slate-500" />
+                    : <Icon className="w-6 h-6 text-white" />
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-base font-semibold">{scenario.title}</h3>
-                    {isCompleted && (
+                    <h3 className={`text-base font-semibold ${isLocked ? "text-muted-foreground/60" : ""}`}>{scenario.title}</h3>
+                    {isLocked && (
+                      <span className="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        🔒 Премиум
+                      </span>
+                    )}
+                    {!isLocked && isCompleted && (
                       <span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${
                         result >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                       }`}>
                         {result}%
                       </span>
                     )}
+                    {!isLocked && scenario.id === "freshbite" && !isPaidUser && (
+                      <span className="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
+                        ✓ Бесплатно
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground mb-2">{scenario.subtitle}</p>
+                  <p className={`text-sm mb-2 ${isLocked ? "text-muted-foreground/40" : "text-muted-foreground"}`}>{scenario.subtitle}</p>
                   <ul className="space-y-1">
                     {scenario.description.map((line, li) => (
-                      <li key={li} className="flex items-start gap-1.5 text-xs text-muted-foreground/60">
-                        <span className="w-1 h-1 rounded-full bg-teal-400/60 mt-1.5 shrink-0" />
+                      <li key={li} className={`flex items-start gap-1.5 text-xs ${isLocked ? "text-muted-foreground/30" : "text-muted-foreground/60"}`}>
+                        <span className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${isLocked ? "bg-slate-300" : "bg-teal-400/60"}`} />
                         <span>{line}</span>
                       </li>
                     ))}
                   </ul>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground/50">
+                  <div className={`flex items-center gap-3 mt-2 text-xs ${isLocked ? "text-muted-foreground/30" : "text-muted-foreground/50"}`}>
                     <span>{scenario.phases.length} этапов</span>
                     <span>{totalQ} решений</span>
                     <span>~{Math.ceil(totalQ * 0.7)} мин</span>
                   </div>
                 </div>
-                <ArrowRight className="w-5 h-5 text-muted-foreground/20 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
+                {isLocked
+                  ? <Shield className="w-5 h-5 text-slate-300 dark:text-slate-600 shrink-0 mt-2" />
+                  : <ArrowRight className="w-5 h-5 text-muted-foreground/20 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
+                }
               </div>
-              {isCompleted && (
+              {!isLocked && isCompleted && (
                 <>
                   <div className="mt-3 h-1.5 bg-muted/50 rounded-full overflow-hidden">
                     <div
@@ -1150,6 +1182,12 @@ function ScenarioSelector({ onSelect }: { onSelect: (id: string) => void }) {
                     </span>
                   </div>
                 </>
+              )}
+              {isLocked && (
+                <div className="mt-3 pt-3 border-t border-border/20 flex items-center gap-2 text-xs text-muted-foreground/40">
+                  <Shield className="w-3 h-3 shrink-0" />
+                  <span>Доступно в платном тарифе</span>
+                </div>
               )}
             </button>
           );

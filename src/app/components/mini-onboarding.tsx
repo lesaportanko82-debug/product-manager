@@ -39,7 +39,6 @@ const STEPS = [
     desc: "Учись в своём темпе. Возвращайся с любого устройства - курс всегда ждёт тебя с того места, где ты остановился.",
     features: null,
     stats: [
-      { value: "2 500+", label: "студентов" },
       { value: "4.8/5", label: "средняя оценка" },
       { value: "92%", label: "до сертификата" },
     ],
@@ -122,7 +121,7 @@ export function MiniOnboarding({ name, onComplete }: MiniOnboardingProps) {
 
               {/* Stats (step 3) */}
               {(current as any).stats && (
-                <div className="grid grid-cols-3 gap-4 mb-7">
+                <div className={`grid gap-4 mb-7 ${(current as any).stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                   {(current as any).stats.map((s: any, i: number) => (
                     <motion.div
                       key={i}
