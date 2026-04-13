@@ -20,6 +20,7 @@ import { DiagnosticPrompt, RecommendedPath } from "./adaptive-learning";
 import { LessonDiscussion } from "./peer-learning";
 import { CapstonePortfolioWidget } from "./capstone-projects";
 import { PMCoachWidget } from "./pm-coach";
+import { DemoUpgradeBanner } from "./demo-upgrade-banner";
 import { NotebookTextarea, NotebookWidget } from "./practice-notebook";
 import { LESSON_DIAGRAMS } from "./framework-diagrams";
 import { getSimulatorStats } from "./project-simulator";
@@ -74,6 +75,7 @@ interface LessonViewProps {
   onOpenCertificate?: () => void;
   accessLevel?: "free" | "monthly" | "lifetime";
   isDemoMode?: boolean;
+  onGoToSignup?: () => void;
 }
 
 function QuizSection({ quiz, title, lessonId, lessonTitle }: { quiz: QuizQuestion[]; title?: string; lessonId: string; lessonTitle: string }) {
@@ -310,7 +312,7 @@ function LessonTOC({ content, containerRef }: { content: string[]; containerRef:
   );
 }
 
-export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggleComplete, onOpenFinalExam, bookmarks, onToggleBookmark, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenOnboarding, onOpenGlossary, onOpenFlashcards, onOpenCertificate, accessLevel = "free", isDemoMode = false }: LessonViewProps) {
+export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggleComplete, onOpenFinalExam, bookmarks, onToggleBookmark, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenOnboarding, onOpenGlossary, onOpenFlashcards, onOpenCertificate, accessLevel = "free", isDemoMode = false, onGoToSignup }: LessonViewProps) {
   const allLessons = getAllLessons();
   const currentIndex = allLessons.findIndex(l => l.lesson.id === lessonId);
   const current = allLessons[currentIndex];
@@ -659,6 +661,11 @@ export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggl
                   </button>
                 ) : <div />}
               </div>
+
+              {/* Demo upgrade banner — shown at the end of the last free lesson */}
+              {isDemoMode && lessonId === "m1-l3" && (
+                <DemoUpgradeBanner onGoToSignup={onGoToSignup} />
+              )}
 
             </div>
           </FadeIn>

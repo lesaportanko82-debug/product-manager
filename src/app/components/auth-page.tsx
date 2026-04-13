@@ -40,9 +40,10 @@ const FEATURES = [
 interface AuthPageProps {
   onAuth: (state: AuthState, isNewUser: boolean) => void;
   onAdmin: () => void;
+  onBack?: () => void;
 }
 
-export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
+export function AuthPage({ onAuth, onAdmin, onBack }: AuthPageProps) {
   // Default to login if returning from payment, otherwise signup for new visitors
   const [mode, setMode] = useState<"login" | "signup" | "forgot">(() => {
     try {
@@ -270,6 +271,19 @@ export function AuthPage({ onAuth, onAdmin }: AuthPageProps) {
           </div>
           <span className="font-bold text-foreground text-[1rem]">Продакт-менеджмент</span>
         </div>
+
+        {/* Back button */}
+        {onBack && (
+          <div className="w-full max-w-[400px] mb-3">
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+              Назад к выбору доступа
+            </button>
+          </div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 24 }}

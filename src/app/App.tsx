@@ -64,7 +64,7 @@ const TESTING_ALL_OPEN = false;
 type ViewMode = "lesson" | "exam" | "glossary" | "flashcards" | "certificate" | "capstone" | "diagnostic" | "pm-coach" | "notebook" | "interview" | "templates" | "analytics" | "data-exercises" | "portfolio" | "resume-review" | "competency-radar";
 
 export default function App() {
-  // ── Payment route detection ──────────────────────────────────���───────────
+  // ── Payment route detection ─────────────────────────────────────────────
   // Detect /payment-success and /payment-fail paths BEFORE any auth logic.
   // These standalone pages are shown without requiring login.
   const isPrivacyPage = window.location.pathname === "/privacy-policy";
@@ -117,6 +117,8 @@ export default function App() {
 
   const [selectedLesson, setSelectedLesson] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("lesson");
+  // Navigation history stack — each entry is the state BEFORE navigating away
+  const [navHistory, setNavHistory] = useState<Array<{ viewMode: ViewMode; selectedLesson: string }>>([]);
   const [completedLessons, setCompletedLessons] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem("course-progress");
@@ -433,15 +435,44 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [canAccessPaidContent]);
 
+  // ── Navigation history helpers — defined first so other callbacks can reference them ──
+
+  const setView = useCallback((mode: ViewMode) => {
+    // Push current state to history before navigating
+    setNavHistory(prev => [...prev, { viewMode, selectedLesson }]);
+    setViewMode(mode);
+    setSelectedLesson("");
+    window.scrollTo(0, 0);
+  }, [viewMode, selectedLesson]);
+
+  // Go back to the previous page in navigation history, or home if no history
+  const handleGoBack = useCallback(() => {
+    setNavHistory(prev => {
+      if (prev.length === 0) {
+        setViewMode("lesson");
+        setSelectedLesson("");
+        window.scrollTo(0, 0);
+        return prev;
+      }
+      const last = prev[prev.length - 1];
+      setViewMode(last.viewMode);
+      setSelectedLesson(last.selectedLesson);
+      window.scrollTo(0, 0);
+      return prev.slice(0, -1);
+    });
+  }, []);
+
   const handleOpenFinalExam = useCallback(() => {
+    // Push current state to history so "back" on exam returns here
+    setNavHistory(prev => [...prev, { viewMode, selectedLesson }]);
     setViewMode("exam");
     setSelectedLesson("");
     window.scrollTo(0, 0);
-  }, []);
+  }, [viewMode, selectedLesson]);
 
   const handleBackFromExam = useCallback(() => {
-    setViewMode("lesson");
-  }, []);
+    handleGoBack();
+  }, [handleGoBack]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -473,14 +504,6 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedLesson, viewMode, completedLessons, handleSelectLesson]);
-
-  const setView = useCallback((mode: ViewMode) => {
-    setViewMode(mode);
-    setSelectedLesson("");
-    window.scrollTo(0, 0);
-  }, []);
-
-
 
   const handleOpenOnboarding = useCallback(() => {
     // No public landing page - just reset to course home
@@ -542,39 +565,45 @@ export default function App() {
       case "exam":
         return <FinalExam onBack={handleBackFromExam} completedLessons={completedLessons} />;
       case "glossary":
-        return <Glossary onSelectLesson={handleSelectLesson} onClose={() => setView("lesson")} />;
+        return <Glossary onSelectLesson={handleSelectLesson} onClose={handleGoBack} />;
       case "flashcards":
-        return <Flashcards onClose={() => setView("lesson")} />;
+        return <Flashcards onClose={handleGoBack} />;
       case "certificate":
-        return <Certificate completedLessons={completedLessons} examScore={examScore} onClose={() => setView("lesson")} />;
+        return <Certificate completedLessons={completedLessons} examScore={examScore} onClose={handleGoBack} />;
       case "capstone":
-        return <CapstoneProjectsView onClose={() => setView("lesson")} accessLevel={accessLevel} isDemoMode={isDemoMode} />;
+        return <CapstoneProjectsView onClose={handleGoBack} accessLevel={accessLevel} isDemoMode={isDemoMode} />;
       case "diagnostic":
         return (
           <div className="flex-1 min-h-screen max-h-screen overflow-y-auto bg-gradient-to-br from-slate-200 via-slate-100 to-teal-100/50 dark:from-slate-900 dark:via-slate-800 dark:to-teal-950/50">
             <div className="max-w-[720px] mx-auto px-6 py-10">
-              <DiagnosticQuiz onComplete={() => setView("lesson")} />
+              <DiagnosticQuiz onComplete={handleGoBack} />
             </div>
           </div>
         );
       case "pm-coach":
-        return <PMCoach onClose={() => setView("lesson")} onSelectLesson={(id: string) => { setView("lesson"); handleSelectLesson(id); }} />;
+        return <PMCoach onClose={handleGoBack} onSelectLesson={(id: string) => {
+          // Navigate to lesson from PM-coach: pop pm-coach from history and go to the lesson
+          setNavHistory(prev => prev.length > 0 ? prev.slice(0, -1) : prev);
+          setViewMode("lesson");
+          setSelectedLesson(id);
+          window.scrollTo(0, 0);
+        }} />;
       case "notebook":
-        return <PracticeNotebook onClose={() => setView("lesson")} completedLessons={completedLessons} />;
+        return <PracticeNotebook onClose={handleGoBack} completedLessons={completedLessons} />;
       case "interview":
-        return <InterviewSimulator onClose={() => setView("lesson")} />;
+        return <InterviewSimulator onClose={handleGoBack} />;
       case "templates":
-        return <TemplateLibrary onClose={() => setView("lesson")} />;
+        return <TemplateLibrary onClose={handleGoBack} />;
       case "analytics":
-        return <AnalyticsDashboard completedLessons={completedLessons} onClose={() => setView("lesson")} />;
+        return <AnalyticsDashboard completedLessons={completedLessons} onClose={handleGoBack} />;
       case "data-exercises":
-        return <DataExercises onClose={() => setView("lesson")} />;
+        return <DataExercises onClose={handleGoBack} />;
       case "portfolio":
-        return <PortfolioBuilder completedLessons={completedLessons} examScore={examScore} onClose={() => setView("lesson")} />;
+        return <PortfolioBuilder completedLessons={completedLessons} examScore={examScore} onClose={handleGoBack} />;
       case "resume-review":
-        return <ResumeReview onClose={() => setView("lesson")} />;
+        return <ResumeReview onClose={handleGoBack} />;
       case "competency-radar":
-        return <CompetencyRadar completedLessons={completedLessons} onClose={() => setView("lesson")} onSelectLesson={handleSelectLesson} />;
+        return <CompetencyRadar completedLessons={completedLessons} onClose={handleGoBack} onSelectLesson={handleSelectLesson} />;
       default:
         // If selected lesson is locked → show inline paywall screen
         // Используем canAccessPaidContent как единственную проверку доступа к платным урокам
@@ -618,6 +647,13 @@ export default function App() {
             onOpenCertificate={() => setView("certificate")}
             accessLevel={canAccessPaidContent ? accessLevel : "free"}
             isDemoMode={isDemoMode}
+            onGoToSignup={() => {
+              setIsDemoMode(false);
+              try { localStorage.removeItem("demo-mode"); } catch {}
+              setAppStep("auth");
+              setAuthMode("selector");
+              window.scrollTo(0, 0);
+            }}
           />
         );
     }
@@ -649,7 +685,7 @@ export default function App() {
       />
     );
   }
-  // ─────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────��────────────────────────────────────────────
 
   // ── Privacy Policy standalone page ──────────────────────────────────────
   if (isPrivacyPage) {
@@ -721,6 +757,7 @@ export default function App() {
         <AuthPage
           onAuth={handleAuth}
           onAdmin={() => setShowAdminPanel(true)}
+          onBack={() => { setAuthMode("selector"); window.scrollTo(0, 0); }}
         />
         <AnimatePresence>
           {showAdminPanel && (
@@ -894,6 +931,7 @@ export default function App() {
               setAccessLevel("free");
               setShowProfileCabinet(false);
               setAppStep("auth");
+              setAuthMode("landing");
               try { localStorage.removeItem("course-started"); } catch {}
               try { localStorage.removeItem("auth-state"); } catch {}
             }}
