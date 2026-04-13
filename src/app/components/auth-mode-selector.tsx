@@ -10,9 +10,10 @@ interface AuthModeSelectorProps {
   onDemoMode: () => void;
   onSignup: () => void;
   onLogin: () => void;
+  onBack?: () => void;
 }
 
-export function AuthModeSelector({ onDemoMode, onSignup, onLogin }: AuthModeSelectorProps) {
+export function AuthModeSelector({ onDemoMode, onSignup, onLogin, onBack }: AuthModeSelectorProps) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900 flex items-center justify-center p-4">
@@ -23,6 +24,15 @@ export function AuthModeSelector({ onDemoMode, onSignup, onLogin }: AuthModeSele
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors mb-6"
+            >
+              <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+              Назад к описанию курса
+            </button>
+          )}
           <div className="inline-flex items-center gap-2 mb-4 px-4 py-2 bg-violet-100 dark:bg-violet-900/30 rounded-full">
             <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-400" />
             <span className="text-sm font-medium text-violet-800 dark:text-violet-300">

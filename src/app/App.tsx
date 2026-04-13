@@ -42,8 +42,10 @@ import { ModuleIntroScreen } from "./components/module-intro";
 import { PaymentSuccessPage } from "./components/payment-success";
 import { PaymentFailPage } from "./components/payment-fail";
 import { PrivacyPolicyModal } from "./components/privacy-policy";
+import { CourseLanding } from "./components/course-landing";
 import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { fetchUserAccess } from "./components/user-access";
+import { OwlExport } from "./components/owl-export";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 
@@ -62,10 +64,11 @@ const TESTING_ALL_OPEN = false;
 type ViewMode = "lesson" | "exam" | "glossary" | "flashcards" | "certificate" | "capstone" | "diagnostic" | "pm-coach" | "notebook" | "interview" | "templates" | "analytics" | "data-exercises" | "portfolio" | "resume-review" | "competency-radar";
 
 export default function App() {
-  // ── Payment route detection ──────────────────────────────────────────────
+  // ── Payment route detection ──────────────────────────────────���───────────
   // Detect /payment-success and /payment-fail paths BEFORE any auth logic.
   // These standalone pages are shown without requiring login.
   const isPrivacyPage = window.location.pathname === "/privacy-policy";
+  const isOwlPage = window.location.pathname === "/owl";
 
   const paymentPageType = useState<"success" | "fail" | null>(() => {
     const path = window.location.pathname;
@@ -91,7 +94,7 @@ export default function App() {
   const [appStep, setAppStep] = useState<"loading" | "auth" | "onboarding" | "welcome" | "course">("loading");
 
   // Auth/Demo mode state
-  const [authMode, setAuthMode] = useState<"selector" | "signup" | "login" | null>("selector");
+  const [authMode, setAuthMode] = useState<"landing" | "selector" | "signup" | "login" | null>("landing");
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [showPaywallAfterSignup, setShowPaywallAfterSignup] = useState(false);
 
@@ -653,6 +656,11 @@ export default function App() {
     return <PrivacyPolicyModal isOpen={true} onClose={() => { window.location.href = "/"; }} />;
   }
 
+  // ── OWL Export standalone page ──────────────────────────────────────
+  if (isOwlPage) {
+    return <OwlExport />;
+  }
+
   // Loading screen while checking session
   if (appStep === "loading") {
     return (
@@ -664,7 +672,21 @@ export default function App() {
   }
 
   if (appStep === "auth") {
-    // If no auth mode selected, show mode selector
+    // Step 1: Show course landing page with all info about the course
+    if (authMode === "landing") {
+      return (
+        <>
+          <CourseLanding onStart={() => { setAuthMode("selector"); window.scrollTo(0, 0); }} />
+          <AnimatePresence>
+            {showAdminPanel && (
+              <AdminPanel onClose={() => setShowAdminPanel(false)} />
+            )}
+          </AnimatePresence>
+        </>
+      );
+    }
+
+    // Step 2: show mode selector
     if (authMode === "selector") {
       return (
         <>
@@ -682,6 +704,7 @@ export default function App() {
             onLogin={() => {
               setAuthMode("login");
             }}
+            onBack={() => { setAuthMode("landing"); window.scrollTo(0, 0); }}
           />
           <AnimatePresence>
             {showAdminPanel && (
