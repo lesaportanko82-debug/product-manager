@@ -3,8 +3,6 @@ import { courseModules, getAllLessons, isModuleUnlocked, courseBlocks, type Quiz
 import { RichContent, extractHeadings } from "./rich-content";
 import { renderInteractiveBlocks } from "./interactive-content";
 import { sendWebhook } from "./webhook";
-import { logActivity } from "./gamification";
-import { logProgress } from "./progress-chart";
 import { BadgesPanel } from "./gamification";
 import { ProgressChart } from "./progress-chart";
 import { ShareProgressButton } from "./share-progress";

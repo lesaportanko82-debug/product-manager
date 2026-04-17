@@ -17,13 +17,13 @@ export async function handleAIChatRequest(body: any): Promise<{ answer?: string;
     return { error: "Вопрос слишком длинный (максимум 500 символов)", status: 400 };
   }
 
+  // Verify API key is configured — getOpenAIConfig() throws if missing
+  let config: ReturnType<typeof getOpenAIConfig>;
   try {
-    const config = getOpenAIConfig();
-  } catch (err) {
+    config = getOpenAIConfig();
+  } catch (_err) {
     return { error: "OpenAI API key not configured", status: 500 };
   }
-
-  const config = getOpenAIConfig();
 
   try {
     // Use enhanced Sovunya personality

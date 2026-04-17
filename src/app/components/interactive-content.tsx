@@ -9,7 +9,7 @@ import {
   Send, RotateCcw, Zap, Trophy, Award, TrendingUp, Users
 } from "lucide-react";
 import {
-  markBlockCompleted, isBlockCompleted, makeBlockId, XP_TABLE,
+  markBlockCompleted, isBlockCompleted, makeBlockId,
   saveCalculatorResult,
 } from "./interactive-progress";
 import { ProjectSimulator } from "./project-simulator";
@@ -1433,7 +1433,7 @@ export const lessonInteractiveContent: Record<string, InteractiveBlock[]> = {
         { role: "interviewer", name: "Исследователь", text: "Расскажите, как обычно заканчивается ваш рабочий день?", note: "Начинаем с контекста, не с продукта" },
         { role: "respondent", name: "Маркетолог", text: "Обычно я ужинаю и открываю Netflix. Это единственный способ 'выключить голову' после работы." },
         { role: "interviewer", name: "Исследователь", text: "Какой результат вы хотите получить?", note: "Ищем ожидаемый результат = 'работу'" },
-        { role: "respondent", name: "Маркетолог", text: "Хочу переключить внимание, успокоить нервную систему и заснуть. Чтобы не тревожиться, что выгорю." },
+        { role: "respondent", name: "Маркетол��г", text: "Хочу переключить внимание, успокоить нервную систему и заснуть. Чтобы не тревожиться, что выгорю." },
         { role: "interviewer", name: "Исследователь", text: "То есть Netflix для вас - не развлечение, а средство эмоциональной регуляции?", note: "Job Story: Когда вынуждена работать 10-12ч -> хочу переключиться -> чтобы не тревожиться о выгорании" },
       ],
     }},

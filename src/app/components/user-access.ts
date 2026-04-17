@@ -16,7 +16,7 @@ export interface UserAccessResult {
 
 const FREE: UserAccessResult = { accessLevel: "free", canAccessPaidContent: false };
 const BASE = `https://${projectId}.supabase.co`;
-const SITE_KEY = "super_secret_12345";
+// SITE_KEY removed — x-site-key header no longer sent from frontend
 
 function levelFromPlanStatus(
   plan: string | undefined | null,
@@ -107,7 +107,6 @@ export async function fetchUserAccess(
       headers: {
         // Supabase gateway требует Authorization (anon key) ДО нашего роутера
         "Authorization": `Bearer ${publicAnonKey}`,
-        "x-site-key": SITE_KEY,
         "Content-Type": "application/json",
       },
     });

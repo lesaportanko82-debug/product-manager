@@ -127,9 +127,8 @@ fetch(`/functions/v1/make-server-279b4dfa/ai-chat`, {
 ## Конфигурация OpenAI API Key
 
 Ключ хранится в переменных окружения Supabase:
-```bash
-OPENAI_API_KEY=sk-proj-...
-```
+
+Настроен через `OPENAI_API_KEY` в Supabase Secrets (Dashboard → Settings → Secrets).
 
 **Важно:** Ключ уже добавлен в секреты проекта и не требует дополнительной настройки.
 

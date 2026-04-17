@@ -3,8 +3,8 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import * as kv from "./kv_store.tsx";
 import { fetchWithRetry } from "./ai-helpers.tsx";
-import { handleAIChatRequest } from "./ai-chat-handler.tsx";
 import { checkOpenAIHealth, SOVUNYA_CONSTANTS } from "./openai-config.tsx";
+import { registerExitIntentRoutes } from "./exit-intent-handler.tsx";
 const app = new Hono();
 
 // Enable logger
@@ -818,8 +818,8 @@ app.post("/make-server-279b4dfa/pm-coach", async (c) => {
 ${levelContext}
 
 ПРАВИЛА:
-1. Задавай ОДИН конкретный вопрос за раз (не список вопросов).
-2. Каждый вопрос должен быть связан с предыдущим ответом пользователя — показывай, что ты слушаешь.
+1. Задавай ОДИН конкретный во��рос за раз (не список вопросов).
+2. Кажды�� вопрос должен быть связан с предыдущим ответом пользователя — показывай, что ты слушаешь.
 3. Используй продуктовые фреймворки (JTBD, CJM, RICE, Impact Mapping, Pirate Metrics, North Star Metric, Lean Canvas) — но вплетай их в вопросы, а не перечисляй.
 4. Если пользователь застрял — дай мягкую подсказку через наводящий вопрос.
 5. Через 4-6 раундов вопросов, когда контекст достаточен — предложи перейти к анализу (скажи: "У меня достаточно контекста для анализа. Хотите, я подготовлю структурированный разбор?").
@@ -1739,12 +1739,16 @@ app.get("/make-server-279b4dfa/user-progress/:userId", async (c) => {
 });
 
 // ===== Admin: Get all users =====
-const ADMIN_PASSWORD = "rediska";
+function checkAdminAuth(pw: string | undefined): boolean {
+  const expected = Deno.env.get("ADMIN_PASSWORD");
+  if (!expected || !pw) return false;
+  return pw === expected;
+}
 
 app.get("/make-server-279b4dfa/admin/users", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const { createClient } = await import("npm:@supabase/supabase-js@2");
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
@@ -1816,7 +1820,7 @@ app.get("/make-server-279b4dfa/admin/users", async (c) => {
 app.post("/make-server-279b4dfa/admin/users/:userId/set-access", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const body = await c.req.json();
     const { level } = body;
@@ -2003,11 +2007,8 @@ app.get("/make-server-279b4dfa/user-access/:userId", async (c) => {
 // Не вызывает auth.getUser() — устраняет проблему холодного старта.
 app.get("/make-server-279b4dfa/my-access", async (c) => {
   try {
-    const siteKey = c.req.header("x-site-key");
-    if (siteKey !== "super_secret_12345") {
-      console.log(`[my-access] bad site key: "${siteKey}"`);
-      return c.json({ level: "free", source: "bad-key" }, 401);
-    }
+    // x-site-key is now optional — frontend no longer sends it
+    // (key is only used server-side when proxying to super-task)
 
     const userId = c.req.query("userId") || c.req.query("user_id") || "";
     if (!userId) {
@@ -2111,7 +2112,7 @@ app.get("/make-server-279b4dfa/my-access", async (c) => {
 app.get("/make-server-279b4dfa/admin/debug-access/:userId", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
 
     const userId = c.req.param("userId");
     const { createClient } = await import("npm:@supabase/supabase-js@2");
@@ -2149,7 +2150,7 @@ app.get("/make-server-279b4dfa/admin/debug-access/:userId", async (c) => {
 app.post("/make-server-279b4dfa/admin/users/:userId/toggle-access", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const body = await c.req.json();
     const { blocked } = body;
@@ -2171,7 +2172,7 @@ app.get("/make-server-279b4dfa/check-access/:userId", async (c) => {
 app.delete("/make-server-279b4dfa/admin/users/:userId", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const { createClient } = await import("npm:@supabase/supabase-js@2");
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -2189,7 +2190,7 @@ app.delete("/make-server-279b4dfa/admin/users/:userId", async (c) => {
 app.post("/make-server-279b4dfa/admin/users/:userId/change-email", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const { email } = await c.req.json();
     if (!email) return c.json({ error: "Email is required" }, 400);
@@ -2205,7 +2206,7 @@ app.post("/make-server-279b4dfa/admin/users/:userId/change-email", async (c) => 
 app.post("/make-server-279b4dfa/admin/users/:userId/change-password", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const { password } = await c.req.json();
     if (!password || password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400);
@@ -2221,7 +2222,7 @@ app.post("/make-server-279b4dfa/admin/users/:userId/change-password", async (c) 
 app.get("/make-server-279b4dfa/admin/users/:userId/modules", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const data = await kv.get(`user-modules:${userId}`);
     return c.json({ blockedModules: data?.blockedModules || [] });
@@ -2232,7 +2233,7 @@ app.get("/make-server-279b4dfa/admin/users/:userId/modules", async (c) => {
 app.post("/make-server-279b4dfa/admin/users/:userId/modules", async (c) => {
   try {
     const adminPass = c.req.header("X-Admin-Password");
-    if (adminPass !== ADMIN_PASSWORD) return c.json({ error: "Unauthorized" }, 401);
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
     const userId = c.req.param("userId");
     const { blockedModules } = await c.req.json();
     await kv.set(`user-modules:${userId}`, { blockedModules: blockedModules || [], updatedAt: new Date().toISOString() });
@@ -2676,7 +2677,7 @@ app.post("/make-server-279b4dfa/payment/init", async (c) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-site-key": "super_secret_12345",
+        "x-site-key": Deno.env.get("PUBLIC_SITE_KEY") || "",
       },
       body: JSON.stringify(body),
     });
@@ -2893,5 +2894,8 @@ app.get("/make-server-279b4dfa/yookassa/success", (c) => {
 </body>
 </html>`);
 });
+
+// ── Exit-intent feedback (extracted to keep this file under deploy limits) ──
+registerExitIntentRoutes(app);
 
 Deno.serve(app.fetch);

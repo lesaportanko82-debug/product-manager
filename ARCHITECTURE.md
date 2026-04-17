@@ -330,7 +330,7 @@
 
 **Оптимизации:**
 - Caching — 24 часа TTL
-- Retry — экспоненциальный backoff
+- Retry — экспоне��циальный backoff
 - Fallback — дружественные сообщения
 
 ---
@@ -340,7 +340,7 @@
 ### Защита данных
 - Все запросы к серверу требуют `Authorization` header
 - Supabase Row Level Security (RLS) на таблицах
-- Админ-панель защищена паролем (`rediska`)
+- Админ-панель защищена паролем (задаётся через `ADMIN_PASSWORD` в Supabase Secrets)
 - OpenAI API key хранится в Supabase Secrets
 
 ### Rate Limiting
@@ -388,16 +388,13 @@ console.log(`Error in ai-chat: ${err}`);
 - [ ] Health checks работают
 
 ### Environment Variables
-```bash
-OPENAI_API_KEY=sk-proj-...
-SUPABASE_URL=https://bjhsgjsxhvwtuerahuha.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-ROBOKASSA_LOGIN=...
-ROBOKASSA_PASSWORD1=...
-ROBOKASSA_PASSWORD2=...
-ROBOKASSA_IS_TEST=true/false
-```
+Все ключи хранятся в Supabase Secrets и env-переменных Deno — никаких значений в коде:
+- `OPENAI_API_KEY` — ключ OpenAI API
+- `SUPABASE_URL` — URL проекта Supabase
+- `SUPABASE_ANON_KEY` — публичный анон-ключ
+- `SUPABASE_SERVICE_ROLE_KEY` — сервисный ключ (только сервер)
+- `ROBOKASSA_LOGIN` / `ROBOKASSA_PASSWORD1` / `ROBOKASSA_PASSWORD2` — Robokassa
+- `ROBOKASSA_IS_TEST` — режим тестирования
 
 ---
 

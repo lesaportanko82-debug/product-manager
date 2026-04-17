@@ -5,10 +5,10 @@ import {
   BookOpen, Trophy, Bot, Star, ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle,
 } from "lucide-react";
 import { PrivacyPolicyModal } from "./privacy-policy";
+import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
-// ─── Прямой вызов super-task (без make-server) ──────────────────────────────
-const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
-const SITE_KEY = "super_secret_12345";
+// ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
+const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
 
 /**
  * Extracts the YooKassa internal payment UUID from the confirmationUrl
@@ -97,9 +97,9 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
       console.log(`[paywall-screen] [ID-CHECK] userEmail = "${userEmail}"`);
       console.log("[paywall-screen] monthly →", body);
 
-      const res = await fetch(SUPER_TASK_URL, {
+      const res = await fetch(PAYMENT_PROXY_URL, {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "x-site-key": SITE_KEY },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${publicAnonKey}` },
         body:    JSON.stringify(body),
       });
 
@@ -150,9 +150,9 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
       console.log(`[paywall-screen] [ID-CHECK] userEmail = "${userEmail}"`);
       console.log("[paywall-screen] lifetime →", body);
 
-      const res = await fetch(SUPER_TASK_URL, {
+      const res = await fetch(PAYMENT_PROXY_URL, {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "x-site-key": SITE_KEY },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${publicAnonKey}` },
         body:    JSON.stringify(body),
       });
 

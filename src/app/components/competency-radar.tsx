@@ -6,7 +6,7 @@
  * Целевые профили ролей + AI gap-анализ + экспорт PNG + история снапшотов.
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
   ResponsiveContainer, Tooltip
@@ -18,7 +18,7 @@ import {
   Download, History, Clock, Camera, Loader2, Trash2, CalendarDays
 } from "lucide-react";
 import { courseModules, getAllLessons, type Module } from "./course-data";
-import { getLocalXP, getTotalCompletedBlocks } from "./interactive-progress";
+import { getLocalXP } from "./interactive-progress";
 import { motion, AnimatePresence } from "motion/react";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 

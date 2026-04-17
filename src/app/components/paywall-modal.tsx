@@ -4,10 +4,10 @@ import {
   X, Lock, Star, Infinity, CheckCircle2, Zap,
   BookOpen, Trophy, Bot, CreditCard, Loader2, AlertCircle,
 } from "lucide-react";
+import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
-// ─── Единственный endpoint — прямой вызов super-task ───────────────────────
-const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
-const SITE_KEY = "super_secret_12345";
+// ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
+const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
 
 /** Сохраняет YooKassa UUID платежа в sessionStorage для надёжной проверки статуса после возврата */
 function storeYookassaPaymentId(ourOrderId: string, confirmationUrl: string, responseData: any) {
@@ -91,11 +91,11 @@ export function PaywallModal({
       console.log(`[paywall-modal] [ID-CHECK] userEmail = "${userEmail}"`);
       console.log("[payment] monthly →", body);
 
-      const res = await fetch(SUPER_TASK_URL, {
+      const res = await fetch(PAYMENT_PROXY_URL, {
         method:  "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-site-key":   SITE_KEY,
+          "Authorization": `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify(body),
       });
@@ -149,11 +149,11 @@ export function PaywallModal({
       console.log(`[paywall-modal] [ID-CHECK] userEmail = "${userEmail}"`);
       console.log("[payment] lifetime →", body);
 
-      const res = await fetch(SUPER_TASK_URL, {
+      const res = await fetch(PAYMENT_PROXY_URL, {
         method:  "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-site-key":   SITE_KEY,
+          "Authorization": `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify(body),
       });
@@ -335,7 +335,7 @@ export function PaywallModal({
               {/* Payment badge */}
               <div className="flex items-center justify-center gap-1.5 text-[0.6875rem] text-muted-foreground/50">
                 <CreditCard className="w-3 h-3" />
-                <span>Оплата через ЮKassa — карты РФ, СБП, кошельки</span>
+                <span>Оплата через ЮKassa — карты ��Ф, СБП, кошельки</span>
               </div>
 
               <p className="text-center text-[0.6875rem] text-muted-foreground/50 pt-1">

@@ -32,7 +32,7 @@
 ## ⚠️ Ограничения безопасности (по дизайну платформы)
 
 ### 🔐 Административный доступ
-- **Пароль:** `evarediska` (захардкожен в `admin-panel.tsx` и `server/index.tsx`)
+- **Пароль:** задаётся через переменную окружения `ADMIN_PASSWORD` в Supabase Secrets
 - **Передача:** через `X-Admin-Password` header
 - **Статус:** это учебная/тестовая платформа, не enterprise-level security
 - **Рекомендация для продакшна:** переместить пароль в environment variables
@@ -108,15 +108,11 @@
 ## 🔧 Рекомендации для полного Production (100%)
 
 ### 1. **Environment Variables** (security++)
-```typescript
-// В /supabase/functions/server/index.tsx
-const ADMIN_PASSWORD = Deno.env.get("ADMIN_PASSWORD") || "evarediska";
-
-// В /src/app/components/admin-panel.tsx  
-// Убрать захардкоженный пароль, требовать от администратора ввод каждый раз
-```
+Пароль администратора и все чувствительные данные должны храниться исключительно в Supabase Secrets
+(Dashboard → Settings → Secrets), а не в коде. Сервер читает их через `Deno.env.get(...)`.
 
 ### 2. **Rate Limiting**
+Добавить ограничение запросов на admin endpoints: не более 100 запросов в минуту.
 ```typescript
 // Добавить в server/rate-limiter.tsx для admin endpoints
 app.use("/make-server-279b4dfa/admin/*", rateLimiter({ maxRequests: 100, windowMs: 60000 }));

@@ -10,7 +10,7 @@ import {
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
-const ADMIN_PASSWORD = "rediska";
+// ADMIN_PASSWORD removed — password is entered by admin and verified server-side
 
 // 38 modules list (реструктурированный курс по 11 блокам)
 const MODULES = [
@@ -78,9 +78,20 @@ function useToast() {
 /* ═══════════════════════════════════════════
    AUTH SCREEN
 ═══════════════════════════════════════════ */
-function AuthScreen({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
-  const [pw, setPw] = useState(""); const [show, setShow] = useState(false); const [err, setErr] = useState("");
-  const submit = () => pw === ADMIN_PASSWORD ? onSuccess() : setErr("Неверный пароль");
+function AuthScreen({ onSuccess, onClose }: { onSuccess: (password: string) => void; onClose: () => void }) {
+  const [pw, setPw] = useState(""); const [show, setShow] = useState(false); const [err, setErr] = useState(""); const [checking, setChecking] = useState(false);
+  const submit = async () => {
+    if (!pw.trim()) { setErr("Введите пароль"); return; }
+    setChecking(true); setErr("");
+    try {
+      const res = await fetch(`${API_BASE}/admin/users`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": pw },
+      });
+      if (res.ok) onSuccess(pw);
+      else setErr("Неверный пароль");
+    } catch { setErr("Ошибка соединения"); }
+    finally { setChecking(false); }
+  };
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
@@ -109,10 +120,10 @@ function AuthScreen({ onSuccess, onClose }: { onSuccess: () => void; onClose: ()
             </button>
           </div>
           {err && <p className="text-xs text-red-500 mb-3 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{err}</p>}
-          <button onClick={submit}
+          <button onClick={submit} disabled={checking}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold text-sm
               hover:from-teal-700 hover:to-emerald-700 transition-all shadow-md shadow-teal-500/20">
-            Войти
+            {checking ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Войти"}
           </button>
         </div>
       </motion.div>
@@ -124,12 +135,13 @@ function AuthScreen({ onSuccess, onClose }: { onSuccess: () => void; onClose: ()
    USER ROW (expanded card)
 ═══════════════════════════════════════════ */
 function UserCard({
-  user, onUpdate, onDelete, notify,
+  user, onUpdate, onDelete, notify, adminPw,
 }: {
   user: AdminUser;
   onUpdate: (u: Partial<AdminUser> & { id: string }) => void;
   onDelete: (id: string) => void;
   notify: (t: string, ok?: boolean) => void;
+  adminPw: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [section, setSection] = useState<UserSection>("access");
@@ -146,7 +158,7 @@ function UserCard({
   const [modsLoading, setModsLoading] = useState(false);
   const [modsSaving, setModsSaving] = useState(false);
 
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": ADMIN_PASSWORD };
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": adminPw };
 
   const toggleBlock = async () => {
     setBlockLoading(true);
@@ -258,7 +270,7 @@ function UserCard({
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <a href="https://t.me/ohh_lessya" target="_blank" rel="noreferrer" title="Связаться"
+          <a href="https://t.me/ohh_lessya" target="_blank" rel="noreferrer" title="Свя��аться"
             className="p-2 rounded-lg text-muted-foreground hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors">
             <MessageCircle className="w-4 h-4" />
           </a>
@@ -462,6 +474,7 @@ function UserCard({
 ══════════════════════════════════════════ */
 export function AdminPanel({ onClose }: { onClose: () => void }) {
   const [isAuth, setIsAuth] = useState(false);
+  const [adminPw, setAdminPw] = useState("");
   const [tab, setTab] = useState<Tab>("users");
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -474,14 +487,14 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
     setLoading(true); setErr("");
     try {
       const res = await fetch(`${API_BASE}/admin/users`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": ADMIN_PASSWORD },
+        headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": adminPw },
       });
       const data = await res.json();
       if (!res.ok) { setErr(data.error || "Ошибка загрузки"); return; }
       setUsers(data.users || []);
     } catch (e) { setErr(`Ошибка сети: ${e}`); }
     finally { setLoading(false); }
-  }, []);
+  }, [adminPw]);
 
   useEffect(() => { if (isAuth) loadUsers(); }, [isAuth, loadUsers]);
 
@@ -508,7 +521,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
     paid: users.filter(u => u.accessLevel !== "free").length,
   };
 
-  if (!isAuth) return <AuthScreen onSuccess={() => setIsAuth(true)} onClose={onClose} />;
+  if (!isAuth) return <AuthScreen onSuccess={(pw) => { setIsAuth(true); setAdminPw(pw); }} onClose={onClose} />;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -665,7 +678,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
                 ) : (
                   <div className="space-y-2">
                     {filtered.map(user => (
-                      <UserCard key={user.id} user={user} onUpdate={updateUser} onDelete={deleteUser} notify={notify} />
+                      <UserCard key={user.id} user={user} onUpdate={updateUser} onDelete={deleteUser} notify={notify} adminPw={adminPw} />
                     ))}
                   </div>
                 )}

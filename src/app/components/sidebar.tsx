@@ -61,9 +61,10 @@ interface SidebarProps {
   freeLessonIds?: Set<string>;
   examScore?: number | null;
   isDemoMode?: boolean;
+  onGetFullAccess?: () => void;
 }
 
-export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOpenFinalExam, showFinalExam, bookmarks, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenLeaderboard, onOpenOnboarding, onOpenCapstone, onOpenDiagnostic, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, isDark, onToggleDark, authState, onOpenAuth, onSignOut, onOpenProfile, onNameChange, accessLevel = "free", freeLessonIds, examScore = null, isDemoMode = false }: SidebarProps) {
+export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOpenFinalExam, showFinalExam, bookmarks, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenLeaderboard, onOpenOnboarding, onOpenCapstone, onOpenDiagnostic, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, isDark, onToggleDark, authState, onOpenAuth, onSignOut, onOpenProfile, onNameChange, accessLevel = "free", freeLessonIds, examScore = null, isDemoMode = false, onGetFullAccess }: SidebarProps) {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(
     // For free/demo users: also pre-expand the simulator module so it's immediately visible
     () => {
@@ -897,6 +898,25 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
           {/* Auth */}
           {authState && onOpenAuth && onSignOut && (
             <SyncStatusBadge authState={authState} onOpenAuth={onOpenAuth} onSignOut={onSignOut} />
+          )}
+
+          {/* Demo mode upgrade CTA */}
+          {isDemoMode && onGetFullAccess && (
+            <motion.button
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.4 }}
+              onClick={() => { onGetFullAccess(); setMobileOpen(false); }}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl
+                bg-gradient-to-r from-teal-500 to-emerald-500
+                hover:from-teal-600 hover:to-emerald-600
+                text-white font-semibold text-[0.8125rem]
+                shadow-md shadow-teal-500/25 hover:shadow-teal-500/40
+                hover:-translate-y-px transition-all group"
+            >
+              <span>🚀 Хочу полный доступ</span>
+              <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+            </motion.button>
           )}
         </div>
       </div>

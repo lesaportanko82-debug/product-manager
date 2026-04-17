@@ -46,6 +46,7 @@ import { CourseLanding } from "./components/course-landing";
 import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { fetchUserAccess } from "./components/user-access";
 import { OwlExport } from "./components/owl-export";
+import { ExitIntentModal } from "./components/exit-intent-modal";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 
@@ -60,6 +61,10 @@ const FREE_LESSON_IDS = new Set([
 
 // 🔓 TEMPORARY TESTING FLAG — set to false to restore paywall
 const TESTING_ALL_OPEN = false;
+
+// 🔒 Уроки, которые ВСЕГДА платные — не открываются ни через бонус, ни через демо.
+// Имеет приоритет над FREE_LESSON_IDS и bonusLessons.
+const PAID_ONLY_LESSON_IDS = new Set(["m1-l4"]);
 
 type ViewMode = "lesson" | "exam" | "glossary" | "flashcards" | "certificate" | "capstone" | "diagnostic" | "pm-coach" | "notebook" | "interview" | "templates" | "analytics" | "data-exercises" | "portfolio" | "resume-review" | "competency-radar";
 
@@ -108,6 +113,19 @@ export default function App() {
   const [accessLevel, setAccessLevel] = useState<"free" | "monthly" | "lifetime">("free");
   // canAccessPaidContent — единственная проверка для UI. true = открыть все платные модули
   const [canAccessPaidContent, setCanAccessPaidContent] = useState<boolean>(false);
+  // Бонусные уроки, разблокированные за фидбек в exit-intent модалке
+  // Инициализируем из localStorage как кеш — при загрузке перепроверяем по email через бэкенд
+  const [bonusLessons, setBonusLessons] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("exit-intent-bonus-unlocked");
+      const parsed: string[] = saved ? JSON.parse(saved) : [];
+      // Фильтруем уроки, которые теперь полностью платные (m1-l4 и др.)
+      const filtered = parsed.filter(id => !PAID_ONLY_LESSON_IDS.has(id));
+      return new Set<string>(filtered);
+    } catch {
+      return new Set<string>();
+    }
+  });
   const [onboardingName, setOnboardingName] = useState("");
   const [paymentBanner, setPaymentBanner] = useState<"success" | "failed" | null>(null);
   const { authState, updateAuth, signOut, checkSession } = useAuth();
@@ -219,6 +237,30 @@ export default function App() {
     }
   }, [authState.userId]);
 
+  // Проверить бонусный доступ по email через бэкенд (источник правды — сервер)
+  const loadBonusAccessByEmail = useCallback(async () => {
+    try {
+      const storedEmail = localStorage.getItem("exit-intent-email");
+      if (!storedEmail) return;
+      const res = await fetch(
+        `${API_BASE}/exit-intent-bonus-access?email=${encodeURIComponent(storedEmail)}`,
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+      );
+      if (!res.ok) return;
+      const data = await res.json() as { lessonIds?: string[] };
+      if (Array.isArray(data.lessonIds) && data.lessonIds.length > 0) {
+        // Фильтруем PAID_ONLY уроки — они не должны открываться через бонус
+        const filtered = data.lessonIds.filter((id: string) => !PAID_ONLY_LESSON_IDS.has(id));
+        setBonusLessons(new Set(filtered));
+        // Обновляем локальный кеш
+        try { localStorage.setItem("exit-intent-bonus-unlocked", JSON.stringify(filtered)); } catch {}
+        console.log(`[bonus-access] ✅ восстановлен по email=${storedEmail} уроки=${filtered.join(",")}`);
+      }
+    } catch (err) {
+      console.log(`[bonus-access] ошибка проверки: ${err}`);
+    }
+  }, []);
+
   // Save progress to Supabase when auth state or progress changes
   const scheduleProgressSync = useCallback((
     completedArr: string[],
@@ -274,11 +316,13 @@ export default function App() {
       } catch {}
       // Load access level
       await loadAccessLevel(state.accessToken, state.userId);
+      // Restore bonus lessons tied to exit-intent email (if any)
+      await loadBonusAccessByEmail();
       // Clear persisted payment banner after login (access is now loaded)
       try { localStorage.removeItem("pending-payment-banner"); } catch {}
       setAppStep("course");
     }
-  }, [updateAuth, clearAllLocalData, applyServerProgress, loadAccessLevel]);
+  }, [updateAuth, clearAllLocalData, applyServerProgress, loadAccessLevel, loadBonusAccessByEmail]);
 
   useEffect(() => {
     logActivity();
@@ -298,13 +342,16 @@ export default function App() {
           applyServerProgress(serverProgress);
         } catch {}
         await loadAccessLevel(sessionState.accessToken, sessionState.userId);
+        await loadBonusAccessByEmail();
         try { localStorage.setItem("course-started", "1"); } catch {}
         setAppStep("course");
       } else {
         // No valid session - show auth immediately
+        await loadBonusAccessByEmail();
         setAppStep("auth");
       }
-    }).catch(() => {
+    }).catch(async () => {
+      await loadBonusAccessByEmail();
       setAppStep("auth");
     });
   }, []);
@@ -400,14 +447,15 @@ export default function App() {
 
   const handleSelectLesson = useCallback((lessonId: string) => {
     // 1. Check paywall — используем canAccessPaidContent как единственную проверку
-    if (!canAccessPaidContent && !FREE_LESSON_IDS.has(lessonId) && !TESTING_ALL_OPEN) {
+    // PAID_ONLY_LESSON_IDS блокируются всегда — независимо от bonusLessons и FREE_LESSON_IDS
+    const isPaidOnly = PAID_ONLY_LESSON_IDS.has(lessonId);
+    const isFreeOrBonus = FREE_LESSON_IDS.has(lessonId) || bonusLessons.has(lessonId);
+    if (!canAccessPaidContent && (!isFreeOrBonus || isPaidOnly) && !TESTING_ALL_OPEN) {
       const allLessons = getAllLessons();
       const lessonData = allLessons.find(l => l.lesson.id === lessonId);
-      setPaywallModuleTitle(lessonData?.module.title);
-      setSelectedLesson(lessonId);
-      setViewMode("lesson");
-      setModuleIntroData(null);
-      window.scrollTo(0, 0);
+      // Показываем PaywallModal как всплывающее окно — не навигируем на урок
+      setPaywallModuleTitle(lessonData?.module.title || "Полный доступ к курсу");
+      setShowPaywall(true);
       return;
     }
 
@@ -433,7 +481,7 @@ export default function App() {
     setSelectedLesson(lessonId);
     setViewMode("lesson");
     window.scrollTo(0, 0);
-  }, [canAccessPaidContent]);
+  }, [canAccessPaidContent, bonusLessons]);
 
   // ── Navigation history helpers — defined first so other callbacks can reference them ──
 
@@ -607,7 +655,7 @@ export default function App() {
       default:
         // If selected lesson is locked → show inline paywall screen
         // Используем canAccessPaidContent как единственную проверку доступа к платным урокам
-        if (!canAccessPaidContent && selectedLesson && !FREE_LESSON_IDS.has(selectedLesson) && !TESTING_ALL_OPEN) {
+        if (!canAccessPaidContent && selectedLesson && (!FREE_LESSON_IDS.has(selectedLesson) || PAID_ONLY_LESSON_IDS.has(selectedLesson)) && (!bonusLessons.has(selectedLesson) || PAID_ONLY_LESSON_IDS.has(selectedLesson)) && !TESTING_ALL_OPEN) {
           return (
             <PaywallScreen
               moduleTitle={paywallModuleTitle}
@@ -648,11 +696,8 @@ export default function App() {
             accessLevel={canAccessPaidContent ? accessLevel : "free"}
             isDemoMode={isDemoMode}
             onGoToSignup={() => {
-              setIsDemoMode(false);
-              try { localStorage.removeItem("demo-mode"); } catch {}
-              setAppStep("auth");
-              setAuthMode("selector");
-              window.scrollTo(0, 0);
+              setPaywallModuleTitle("Полный доступ к курсу");
+              setShowPaywall(true);
             }}
           />
         );
@@ -685,7 +730,7 @@ export default function App() {
       />
     );
   }
-  // ────────────────────────────��────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
 
   // ── Privacy Policy standalone page ──────────────────────────────────────
   if (isPrivacyPage) {
@@ -835,7 +880,7 @@ export default function App() {
         selectedLesson={selectedLesson}
         onSelectLesson={handleSelectLesson}
         accessLevel={TESTING_ALL_OPEN ? "lifetime" : (canAccessPaidContent ? accessLevel : "free")}
-        freeLessonIds={TESTING_ALL_OPEN ? undefined : (canAccessPaidContent ? undefined : FREE_LESSON_IDS)}
+        freeLessonIds={TESTING_ALL_OPEN ? undefined : (canAccessPaidContent ? undefined : new Set([...FREE_LESSON_IDS, ...[...bonusLessons].filter(id => !PAID_ONLY_LESSON_IDS.has(id))]))}
         completedLessons={completedLessons}
         onOpenFinalExam={handleOpenFinalExam}
         showFinalExam={viewMode === "exam"}
@@ -844,6 +889,10 @@ export default function App() {
         onOpenFlashcards={() => setView("flashcards")}
         onOpenCertificate={() => setView("certificate")}
         isDemoMode={isDemoMode}
+        onGetFullAccess={() => {
+          setPaywallModuleTitle("Полный доступ к курсу");
+          setShowPaywall(true);
+        }}
       />
       <main className="flex-1 min-w-0 overflow-hidden relative">
         {/* Robokassa payment result banner */}
@@ -956,6 +1005,28 @@ export default function App() {
         userId={authState.userId ?? undefined}
         userEmail={authState.email ?? undefined}
         accessToken={authState.accessToken ?? undefined}
+      />
+
+      {/* Exit-intent modal — только для бесплатных пользователей */}
+      <ExitIntentModal
+        isFreeTier={!canAccessPaidContent && appStep === "course"}
+        onUpgrade={() => {
+          setPaywallModuleTitle("Полный доступ к курсу");
+          setShowPaywall(true);
+        }}
+        onUnlockLessons={(ids) => {
+          setBonusLessons(new Set(ids));
+        }}
+        onGoToLesson={(lessonId) => {
+          setSelectedLesson(lessonId);
+          setViewMode("lesson");
+          window.scrollTo(0, 0);
+        }}
+        onGoToAuth={() => {
+          setAppStep("auth");
+          setAuthMode("selector");
+          window.scrollTo(0, 0);
+        }}
       />
     </div>
   );

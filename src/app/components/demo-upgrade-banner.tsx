@@ -6,9 +6,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { PrivacyPolicyModal } from "./privacy-policy";
+import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
-const SUPER_TASK_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task";
-const SITE_KEY = "super_secret_12345";
+// ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
+const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
 
 const PERKS = [
   { icon: <BookOpen className="w-4 h-4" />, text: "38 модулей, 60+ уроков по продакт-менеджменту" },
@@ -48,9 +49,9 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgra
         accessDays: 30,
         appUrl: "https://www.product-intensive.com",
       };
-      const res = await fetch(SUPER_TASK_URL, {
+      const res = await fetch(PAYMENT_PROXY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-site-key": SITE_KEY },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${publicAnonKey}` },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(async () => {
@@ -82,9 +83,9 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgra
         accessDays: null,
         appUrl: "https://www.product-intensive.com",
       };
-      const res = await fetch(SUPER_TASK_URL, {
+      const res = await fetch(PAYMENT_PROXY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-site-key": SITE_KEY },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${publicAnonKey}` },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(async () => {

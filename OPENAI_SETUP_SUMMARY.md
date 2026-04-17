@@ -157,10 +157,7 @@
 
 ## Переменные окружения
 
-OpenAI API Key уже настроен в Supabase Secrets:
-```
-OPENAI_API_KEY=sk-proj-...
-```
+OpenAI API Key уже настроен в Supabase Secrets (Dashboard → Settings → Secrets) через переменную `OPENAI_API_KEY`.
 
 **✅ Никаких дополнительных действий не требуется!**
 

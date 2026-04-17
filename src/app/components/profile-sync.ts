@@ -5,7 +5,7 @@
 
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import { getLocalXP } from "./interactive-progress";
-import { getStreak, ALL_BADGES } from "./gamification";
+import { getStreak } from "./gamification";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 
