@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { PrivacyPolicyModal } from "./privacy-policy";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { useCurrencyRates } from "./use-currency-rates";
 
 // ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
 const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
@@ -70,6 +71,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const { formatRub, formatKzt, loading: ratesLoading } = useCurrencyRates();
 
   const handleTelegram = () => window.open("https://t.me/ohh_lessya", "_blank");
 
@@ -269,6 +271,16 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
 
           {/* Pricing */}
           <div className="px-6 pt-4 pb-7 space-y-3">
+
+            {/* ── Early-bird banner ── */}
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 px-4 py-3.5 text-center">
+              <p className="text-[0.7rem] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">🔥 Специальная цена ранней регистрации</p>
+              <p className="text-[0.8125rem] text-amber-700 dark:text-amber-300 leading-snug">
+                Старт нового потока — <span className="font-bold">6 мая</span>.<br/>
+                Первым оплатившим откроем подготовительные модули уже сейчас!
+              </p>
+            </div>
+
             <p className="text-[0.75rem] text-muted-foreground text-center mb-2 font-medium">
               Выберите тариф или свяжитесь напрямую:{" "}
               <a
@@ -303,8 +315,15 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
                 </p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <p className="text-[1.25rem] font-bold text-teal-600 dark:text-teal-400">7000₽</p>
-                <p className="text-[0.6875rem] text-muted-foreground/60">/ месяц</p>
+                <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">$350</p>
+                <p className="text-[1.25rem] font-bold text-teal-600 dark:text-teal-400 leading-none">$85</p>
+                <p className="text-[0.65rem] text-amber-500 font-bold mt-0.5">ранний доступ</p>
+                {!ratesLoading && (
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatRub(85)}</p>
+                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatKzt(85)}</p>
+                  </div>
+                )}
               </div>
             </motion.button>
 
@@ -339,8 +358,15 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
                 </p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <p className="text-[1.25rem] font-bold text-emerald-600 dark:text-emerald-400">9000₽</p>
-                <p className="text-[0.6875rem] text-muted-foreground/60">навсегда</p>
+                <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">$400</p>
+                <p className="text-[1.25rem] font-bold text-emerald-600 dark:text-emerald-400 leading-none">$100</p>
+                <p className="text-[0.65rem] text-amber-500 font-bold mt-0.5">навсегда</p>
+                {!ratesLoading && (
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatRub(100)}</p>
+                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatKzt(100)}</p>
+                  </div>
+                )}
               </div>
             </motion.button>
 

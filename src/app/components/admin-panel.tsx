@@ -6,8 +6,10 @@ import {
   KeyRound, Crown, Clock, ChevronDown, ChevronUp, Eye, EyeOff, Trash2,
   Mail, MessageCircle, TrendingUp, LayoutDashboard, Settings, LogOut,
   Package, ChevronRight, CheckSquare, Square, MoreVertical,
+  MousePointerClick, Send, BarChart2, Copy,
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { GrantAccessTool } from "./grant-access-tool";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 // ADMIN_PASSWORD removed — password is entered by admin and verified server-side
@@ -52,7 +54,7 @@ interface AdminUser {
   accessGrantedAt: string | null;
 }
 
-type Tab = "users" | "stats" | "settings";
+type Tab = "users" | "stats" | "leads" | "settings";
 type UserSection = "access" | "credentials" | "modules";
 
 const fmt = (iso: string | null, time = false) => {
@@ -270,7 +272,7 @@ function UserCard({
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <a href="https://t.me/ohh_lessya" target="_blank" rel="noreferrer" title="Свя��аться"
+          <a href="https://t.me/ohh_lessya" target="_blank" rel="noreferrer" title="Свяаться"
             className="p-2 rounded-lg text-muted-foreground hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors">
             <MessageCircle className="w-4 h-4" />
           </a>
@@ -351,8 +353,8 @@ function UserCard({
                   <div className="flex flex-wrap gap-2">
                     {([
                       { level: "free" as const, label: "Free", sub: "2 модуля", cls: "border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300" },
-                      { level: "monthly" as const, label: "Месяц ($70)", sub: "30 дней", cls: "border-teal-200 dark:border-teal-700/50 hover:bg-teal-50 dark:hover:bg-teal-900/20 text-teal-700 dark:text-teal-300" },
-                      { level: "lifetime" as const, label: "Вечный ($90)", sub: "навсегда", cls: "border-violet-200 dark:border-violet-700/50 hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-700 dark:text-violet-300" },
+                      { level: "monthly" as const, label: "Месяц ($85)", sub: "30 дней", cls: "border-teal-200 dark:border-teal-700/50 hover:bg-teal-50 dark:hover:bg-teal-900/20 text-teal-700 dark:text-teal-300" },
+                      { level: "lifetime" as const, label: "Вечный ($100)", sub: "навсегда", cls: "border-violet-200 dark:border-violet-700/50 hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-700 dark:text-violet-300" },
                     ]).map(opt => (
                       <button key={opt.level} onClick={() => setAccess(opt.level)} disabled={accessLoading || user.accessLevel === opt.level}
                         className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium border transition-all disabled:opacity-60 bg-card ${opt.cls} ${user.accessLevel === opt.level ? "ring-2 ring-offset-1 ring-teal-400/50" : ""}`}>
@@ -470,6 +472,245 @@ function UserCard({
 }
 
 /* ═══════════════════════════════════════════
+   LEADS TAB
+══════════════════════════════════════════ */
+interface FeedbackEntry {
+  id: string;
+  email: string;
+  feedback: string;
+  page: string;
+  ts: string;
+  status: string;
+}
+
+function LeadsTab({ adminPw }: { adminPw: string }) {
+  const [entries, setEntries] = useState<FeedbackEntry[]>([]);
+  const [serverStats, setServerStats] = useState<{ opens: number; submits: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const { toast, notify } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const res = await fetch(`${API_BASE}/admin/exit-intent`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": adminPw },
+      });
+      const text = await res.text();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      try { data = JSON.parse(text); } catch {
+        setErr(`Сервер вернул не-JSON: ${text.slice(0, 300)}`);
+        return;
+      }
+      if (!res.ok) { setErr(data?.error || `HTTP ${res.status}`); return; }
+      setEntries(Array.isArray(data.entries) ? data.entries : []);
+      setServerStats(data.stats ?? null);
+    } catch (e) { setErr(`Ошибка сети: ${e}`); }
+    finally { setLoading(false); }
+  }, [adminPw]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const deleteEntry = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/exit-intent/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": adminPw },
+      });
+      if (!res.ok) { notify((await res.json()).error || "Ошибка удаления", false); return; }
+      setEntries(prev => prev.filter(e => e.id !== id));
+      notify("Запись удалена ✓");
+    } catch { notify("Ошибка сети", false); }
+  }, [adminPw, notify]);
+
+  const copyEmail = (email: string) => {
+    navigator.clipboard.writeText(email).then(() => notify("Email скопирован ✓")).catch(() => {});
+  };
+
+  const copyAllEmails = () => {
+    const uniq = [...new Set(filtered.map(e => e.email))];
+    navigator.clipboard.writeText(uniq.join("\n"))
+      .then(() => notify(`Скопировано ${uniq.length} email ✓`))
+      .catch(() => {});
+  };
+
+  const filtered = entries.filter(e => {
+    const q = search.toLowerCase();
+    return !q || e.email.toLowerCase().includes(q) || e.feedback.toLowerCase().includes(q);
+  });
+
+  const uniqueEmails = new Set(entries.map(e => e.email)).size;
+  const conversion = serverStats && serverStats.opens > 0
+    ? Math.round((serverStats.submits / serverStats.opens) * 100)
+    : 0;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-6 py-5">
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className={`mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm border ${
+              toast.ok ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-400"
+                       : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400"
+            }`}>
+            {toast.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+            {toast.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Stat cards ── */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Показов модала", value: serverStats?.opens ?? "—", icon: <MousePointerClick className="w-5 h-5" />, color: "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300", hint: "Сколько раз окно при выходе было показано" },
+          { label: "Ответов / лидов", value: serverStats?.submits ?? "—", icon: <Send className="w-5 h-5" />, color: "bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-300", hint: "Сколько человек заполнили форму" },
+          { label: "Конверсия", value: serverStats ? `${conversion}%` : "—", icon: <BarChart2 className="w-5 h-5" />, color: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300", hint: "Ответили / Показов × 100" },
+          { label: "Уникальных email", value: uniqueEmails, icon: <Mail className="w-5 h-5" />, color: "bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300", hint: "Уникальные адреса среди всех ответов" },
+        ].map(s => (
+          <div key={s.label} title={s.hint} className="bg-card rounded-2xl border border-border p-4 flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.color}`}>{s.icon}</div>
+            <div>
+              <p className="text-xl font-bold text-foreground leading-none">{s.value}</p>
+              <p className="text-[0.7rem] text-muted-foreground mt-0.5 leading-tight">{s.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+          <input type="text" placeholder="Поиск по email или тексту ответа..." value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 rounded-xl border border-border bg-muted/30 text-sm text-foreground
+              placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:border-teal-400 transition-all"
+          />
+        </div>
+        <button onClick={copyAllEmails} disabled={filtered.length === 0} title="Скопировать все email из текущей выборки"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-muted-foreground
+            hover:text-foreground hover:bg-muted text-xs font-medium transition-all disabled:opacity-40">
+          <Copy className="w-3.5 h-3.5" /> Скопировать email
+        </button>
+        <button onClick={load} disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-muted-foreground
+            hover:text-foreground hover:bg-muted text-xs font-medium transition-all disabled:opacity-50">
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Обновить
+        </button>
+      </div>
+
+      {/* ── Error ── */}
+      {err && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />{err}
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+        {/* Table header */}
+        <div className="grid grid-cols-[1fr_1.8fr_auto_auto] gap-4 px-4 py-2.5 border-b border-border bg-muted/40">
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">Email</span>
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">Ответ пользователя</span>
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">Дата</span>
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground w-14"></span>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-teal-500" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <MousePointerClick className="w-10 h-10 mb-3 opacity-25" />
+            <p className="text-sm">{search ? "Ничего не найдено" : "Ответов пока нет"}</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {filtered.map(entry => (
+              <div key={entry.id}>
+                {/* Main row */}
+                <div className="grid grid-cols-[1fr_1.8fr_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors">
+                  {/* Email */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-[0.65rem] font-bold shrink-0">
+                      {entry.email[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <button onClick={() => copyEmail(entry.email)} title="Нажмите, чтобы скопировать"
+                      className="text-xs font-medium text-foreground truncate block hover:text-teal-600 transition-colors max-w-[140px]">
+                      {entry.email}
+                    </button>
+                  </div>
+
+                  {/* Feedback preview / expand */}
+                  <button onClick={() => setExpandedId(prev => prev === entry.id ? null : entry.id)} className="text-left min-w-0">
+                    <p className={`text-xs text-muted-foreground leading-relaxed ${expandedId === entry.id ? "" : "line-clamp-2"}`}>
+                      {entry.feedback}
+                    </p>
+                    {entry.feedback.length > 80 && (
+                      <span className="text-[0.65rem] text-teal-500 font-medium mt-0.5 block">
+                        {expandedId === entry.id ? "Свернуть ↑" : "Читать полностью ↓"}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Date */}
+                  <div className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                    {fmt(entry.ts, true)}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => copyEmail(entry.email)} title="Скопировать email"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors">
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => deleteEntry(entry.id)} title="Удалить"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded: full feedback + page */}
+                <AnimatePresence initial={false}>
+                  {expandedId === entry.id && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
+                      <div className="px-4 pb-3 pt-0">
+                        <div className="bg-muted/40 rounded-xl border border-border/60 p-3">
+                          <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{entry.feedback}</p>
+                          {entry.page && (
+                            <p className="text-[0.65rem] text-muted-foreground mt-2 font-mono">Страница: {entry.page}</p>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Footer */}
+        {filtered.length > 0 && (
+          <div className="px-4 py-2.5 border-t border-border bg-muted/20">
+            <p className="text-xs text-muted-foreground">
+              {filtered.length} из {entries.length} ответов · {uniqueEmails} уникальных email
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    MAIN PANEL
 ══════════════════════════════════════════ */
 export function AdminPanel({ onClose }: { onClose: () => void }) {
@@ -492,7 +733,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
       const data = await res.json();
       if (!res.ok) { setErr(data.error || "Ошибка загрузки"); return; }
       setUsers(data.users || []);
-    } catch (e) { setErr(`Ошибка сети: ${e}`); }
+    } catch (e) { setErr(`Ошибк�� сети: ${e}`); }
     finally { setLoading(false); }
   }, [adminPw]);
 
@@ -552,6 +793,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
             {([
               { key: "users" as Tab, label: "Пользователи", icon: <Users className="w-4 h-4" />, badge: users.length },
               { key: "stats" as Tab, label: "Статистика", icon: <TrendingUp className="w-4 h-4" /> },
+              { key: "leads" as Tab, label: "Лиды (выход)", icon: <MousePointerClick className="w-4 h-4" /> },
               { key: "settings" as Tab, label: "Настройки", icon: <Settings className="w-4 h-4" /> },
             ] as const).map(item => (
               <button key={item.key} onClick={() => setTab(item.key)}
@@ -588,7 +830,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
           <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
             <div>
               <h2 className="font-bold text-foreground">
-                {tab === "users" ? "Пользователи" : tab === "stats" ? "Статистика" : "Настройки"}
+                {tab === "users" ? "Пользователи" : tab === "stats" ? "Статистика" : tab === "leads" ? "Лиды — Окно при выходе" : "Настройки"}
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">www.product-intensive.com</p>
             </div>
@@ -715,8 +957,8 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
                 <div className="space-y-3">
                   {([
                     { label: "Free", count: users.filter(u => u.accessLevel === "free").length, color: "bg-slate-400" },
-                    { label: "Месяц ($70)", count: users.filter(u => u.accessLevel === "monthly").length, color: "bg-teal-500" },
-                    { label: "Вечный ($90)", count: users.filter(u => u.accessLevel === "lifetime").length, color: "bg-violet-500" },
+                    { label: "Месяц ($85)", count: users.filter(u => u.accessLevel === "monthly").length, color: "bg-teal-500" },
+                    { label: "Вечный ($100)", count: users.filter(u => u.accessLevel === "lifetime").length, color: "bg-violet-500" },
                   ]).map(row => (
                     <div key={row.label}>
                       <div className="flex items-center justify-between text-sm mb-1">
@@ -733,9 +975,19 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {/* ─ LEADS TAB ─ */}
+          {tab === "leads" && (
+            <LeadsTab adminPw={adminPw} />
+          )}
+
           {/* ─ SETTINGS TAB ─ */}
           {tab === "settings" && (
             <div className="flex-1 overflow-y-auto px-6 py-6">
+              {/* ── Grant access tool ── */}
+              <div className="mb-4">
+                <GrantAccessTool adminPassword={adminPw} />
+              </div>
+
               <div className="bg-card rounded-2xl border border-border p-5 mb-4">
                 <h3 className="font-semibold text-foreground mb-1">Контакт администратора</h3>
                 <p className="text-sm text-muted-foreground mb-3">Telegram для поддержки пользователей</p>
@@ -750,8 +1002,8 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
                 <div className="space-y-2">
                   {[
                     { label: "Free", desc: "Первые 2 модуля бесплатно (модуль 1 + аналитика)", color: "text-slate-500" },
-                    { label: "Месяц - $70", desc: "Доступ ко всем 38 модулям на 30 дней", color: "text-teal-600 dark:text-teal-400" },
-                    { label: "Вечный - $90", desc: "Полный доступ к 38 модулям навсегда", color: "text-violet-600 dark:text-violet-400" },
+                    { label: "Месяц - $85", desc: "Доступ ко всем 38 модулям на 30 дней", color: "text-teal-600 dark:text-teal-400" },
+                    { label: "Вечный - $100", desc: "Полный доступ к 38 модулям навсегда", color: "text-violet-600 dark:text-violet-400" },
                   ].map(t => (
                     <div key={t.label} className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-border/60">
                       <div className={`font-semibold text-sm ${t.color} w-32 shrink-0`}>{t.label}</div>

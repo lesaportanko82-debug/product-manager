@@ -102,10 +102,15 @@ export function ExitIntentModal({ isFreeTier, onUpgrade, onGoToLesson, onGoToAut
     };
   }, []); // [] — эффект запускается строго один раз, таймер не сбрасывается
 
-  // Фокус на поле при открытии
+  // Фокус на поле при открытии + трекинг показа на сервере
   useEffect(() => {
     if (visible && step === "form") {
       setTimeout(() => textareaRef.current?.focus(), 350);
+      // Ping server: increment open counter (fire-and-forget)
+      fetch(`${API_BASE}/exit-intent-track-open`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${publicAnonKey}` },
+      }).catch(() => {});
     }
   }, [visible, step]);
 

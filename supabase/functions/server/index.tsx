@@ -1855,6 +1855,51 @@ app.post("/make-server-279b4dfa/admin/users/:userId/set-access", async (c) => {
   } catch (err) { return c.json({ error: `Error setting user access: ${err}` }, 500); }
 });
 
+// ===== Admin: Grant access by email (finds userId automatically) =====
+app.post("/make-server-279b4dfa/admin/grant-by-email", async (c) => {
+  try {
+    const adminPass = c.req.header("X-Admin-Password");
+    if (!checkAdminAuth(adminPass)) return c.json({ error: "Unauthorized" }, 401);
+
+    const body = await c.req.json();
+    const { email, level = "lifetime" } = body;
+    if (!email) return c.json({ error: "email required" }, 400);
+
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Find user by email
+    const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    if (listErr) return c.json({ error: `listUsers failed: ${listErr.message}` }, 500);
+
+    const found = (listData?.users || []).find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    if (!found) return c.json({ error: `User not found for email: ${email}` }, 404);
+
+    const userId = found.id;
+    const now = new Date();
+    let expiresAt: string | null = null;
+    if (level === "monthly") {
+      const exp = new Date(now);
+      exp.setDate(exp.getDate() + 30);
+      expiresAt = exp.toISOString();
+    }
+
+    // Write KV
+    await kv.set(`user-access:${userId}`, { level, grantedAt: now.toISOString(), expiresAt });
+
+    // Write Postgres
+    const pgPlan = level === "monthly" ? "month" : level;
+    const pgStatus = level === "free" ? "inactive" : "active";
+    await supabase.from("user_access").upsert(
+      { user_id: userId, plan: pgPlan, status: pgStatus, expires_at: expiresAt, updated_at: now.toISOString() },
+      { onConflict: "user_id" }
+    );
+
+    console.log(`[grant-by-email] ✅ ${email} (${userId}) → level="${level}"`);
+    return c.json({ success: true, email, userId, level, expiresAt });
+  } catch (err) { return c.json({ error: `Error granting access by email: ${err}` }, 500); }
+});
+
 // ===== Get user access level (authenticated) =====
 // Sources of truth (in priority order):
 //   1. Postgres table `user_access` — written by super-task after YooKassa payment

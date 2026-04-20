@@ -5,6 +5,7 @@ import {
   BookOpen, Trophy, Bot, CreditCard, Loader2, AlertCircle,
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { useCurrencyRates } from "./use-currency-rates";
 
 // ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
 const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
@@ -63,6 +64,7 @@ export function PaywallModal({
 }: PaywallModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
   const [error, setError]             = useState<string | null>(null);
+  const { formatRub, formatKzt, loading: ratesLoading } = useCurrencyRates();
 
   // ── Месячный тариф ────────────────────────────────────────────────────────
   const handleMonthly = async () => {
@@ -257,6 +259,16 @@ export function PaywallModal({
 
             {/* Pricing */}
             <div className="px-6 pt-4 pb-6 space-y-3">
+
+              {/* ── Early-bird banner ── */}
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 px-4 py-3 text-center">
+                <p className="text-[0.7rem] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-0.5">🔥 Специальная цена ранней регистрации</p>
+                <p className="text-[0.75rem] text-amber-700 dark:text-amber-300 leading-snug">
+                  Старт нового потока — <span className="font-bold">6 мая</span>.<br/>
+                  Первым оплатившим откроем подготовительные модули уже сейчас!
+                </p>
+              </div>
+
               <p className="text-[0.75rem] text-muted-foreground text-center mb-1">
                 Выберите тариф или свяжитесь напрямую:{" "}
                 <a
@@ -291,8 +303,15 @@ export function PaywallModal({
                   </p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="text-[1.125rem] font-bold text-teal-600 dark:text-teal-400">7000₽</p>
-                  <p className="text-[0.6875rem] text-muted-foreground/60">/ месяц</p>
+                  <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">$350</p>
+                  <p className="text-[1.125rem] font-bold text-teal-600 dark:text-teal-400 leading-none">$85</p>
+                  <p className="text-[0.6rem] text-amber-500 font-semibold mt-0.5">ранний доступ</p>
+                  {!ratesLoading && (
+                    <div className="mt-1 space-y-0.5 text-right">
+                      <p className="text-[0.6rem] text-muted-foreground/60 leading-none">{formatRub(85)}</p>
+                      <p className="text-[0.6rem] text-muted-foreground/60 leading-none">{formatKzt(85)}</p>
+                    </div>
+                  )}
                 </div>
               </motion.button>
 
@@ -327,15 +346,22 @@ export function PaywallModal({
                   </p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="text-[1.125rem] font-bold text-emerald-600 dark:text-emerald-400">9000₽</p>
-                  <p className="text-[0.6875rem] text-muted-foreground/60">навсегда</p>
+                  <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">$400</p>
+                  <p className="text-[1.125rem] font-bold text-emerald-600 dark:text-emerald-400 leading-none">$100</p>
+                  <p className="text-[0.6rem] text-amber-500 font-semibold mt-0.5">навсегда</p>
+                  {!ratesLoading && (
+                    <div className="mt-1 space-y-0.5 text-right">
+                      <p className="text-[0.6rem] text-muted-foreground/60 leading-none">{formatRub(100)}</p>
+                      <p className="text-[0.6rem] text-muted-foreground/60 leading-none">{formatKzt(100)}</p>
+                    </div>
+                  )}
                 </div>
               </motion.button>
 
               {/* Payment badge */}
               <div className="flex items-center justify-center gap-1.5 text-[0.6875rem] text-muted-foreground/50">
                 <CreditCard className="w-3 h-3" />
-                <span>Оплата через ЮKassa — карты ��Ф, СБП, кошельки</span>
+                <span>Оплата через ЮKassa — карты РФ, СБП, кошельки</span>
               </div>
 
               <p className="text-center text-[0.6875rem] text-muted-foreground/50 pt-1">
