@@ -50,6 +50,10 @@ import { ExitIntentModal } from "./components/exit-intent-modal";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa`;
 
+// Supabase edge-function base (for progress endpoints)
+const SUPABASE_FN_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const SITE_KEY = "rediska210426";
+
 // First 3 lessons of module 1 are free + entire analytics module (m-analytics with 9 lessons) + simulator lesson
 const FREE_LESSON_IDS = new Set([
   "m1-l1", "m1-l2", "m1-l3",
@@ -113,6 +117,18 @@ export default function App() {
   const [accessLevel, setAccessLevel] = useState<"free" | "monthly" | "lifetime">("free");
   // canAccessPaidContent — единственная проверка для UI. true = открыть все платные модули
   const [canAccessPaidContent, setCanAccessPaidContent] = useState<boolean>(false);
+  // Идёт ли сейчас запрос к get-user-access
+  const [accessLoading, setAccessLoading] = useState<boolean>(false);
+  // Прогресс пользователя по модулям (загружается из Supabase)
+  const [userProgress, setUserProgress] = useState<Record<string, { progress: number; completed: boolean }>>({});
+  // Ref для защиты от затирания ненулевого состояния пустым API-ответом
+  const userProgressRef = useRef<Record<string, { progress: number; completed: boolean }>>({});
+  // Сырой ответ API get-user-progress — единственный источник правды для отображения прогресса на странице курса
+  const [userProgressResponse, setUserProgressResponse] = useState<{
+    ok: boolean;
+    userId?: string;
+    progress: Record<string, { progress: number; completed: boolean; updated_at?: string }>;
+  } | null>(null);
   // Бонусные уроки, разблокированные за фидбек в exit-intent модалке
   // Инициализируем из localStorage как кеш — при загрузке перепроверяем по email через бэкенд
   const [bonusLessons, setBonusLessons] = useState<Set<string>>(() => {
@@ -210,6 +226,7 @@ export default function App() {
     // Сбрасываем доступ НЕМЕДЛЕННО до завершения async-запроса
     setCanAccessPaidContent(false);
     setAccessLevel("free");
+    setAccessLoading(true);
     console.log(`[App] ── loadAccessLevel called ──`);
     console.log(`[App] [ID-CHECK] authState.userId (текущий пользователь) = "${authState.userId ?? "null"}"`);
     console.log(`[App] [ID-CHECK] userId передан в get-user-access = "${userId}"`);
@@ -229,6 +246,7 @@ export default function App() {
 
     setAccessLevel(result.accessLevel);
     setCanAccessPaidContent(result.canAccessPaidContent);
+    setAccessLoading(false);
 
     if (result.canAccessPaidContent) {
       console.log(`[App] ✅ Paid access GRANTED — paywall скрыт, все модули открыты`);
@@ -260,6 +278,199 @@ export default function App() {
       console.log(`[bonus-access] ошибка проверки: ${err}`);
     }
   }, []);
+
+  // ── Маппинг: module_N (ключ API) → module.id (фронтенд ID) ───────────────
+  // Пример: { 1: "m1", 2: "m2", 14: "m-analytics", 37: "m-sim", ... }
+  // Нужен для нормализации API-ответа, который может вернуть "module_1" вместо "m1"
+  const numberToModuleIdMap = useMemo<Record<number, string>>(() => {
+    const map: Record<number, string> = {};
+    courseModules.forEach(m => { map[m.number] = m.id; });
+    console.log(`[🗺️ numberToModuleIdMap] Построен маппинг для ${courseModules.length} модулей:`, map);
+    console.log(`[🗺️ numberToModuleIdMap] Первые 5 модулей — m.number → m.id:`, courseModules.slice(0, 5).map(m => `${m.number}→"${m.id}"`).join(", "));
+    return map;
+  }, []);
+
+  // Нормализует ключи API-ответа: "module_1" → "m1", "module_14" → "m-analytics"
+  // Ключи, уже совпадающие с module.id, остаются без изменений.
+  const normalizeProgressKeys = useCallback(
+    (raw: Record<string, { progress: number; completed: boolean; updated_at?: string }>)
+      : Record<string, { progress: number; completed: boolean; updated_at?: string }> => {
+      const result: Record<string, { progress: number; completed: boolean; updated_at?: string }> = {};
+      for (const [key, val] of Object.entries(raw)) {
+        const match = key.match(/^module_(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          const moduleId = numberToModuleIdMap[num];
+          const normalizedKey = moduleId ?? key;
+          result[normalizedKey] = val;
+          console.log(`[userProgress] key remap: "${key}" → "${normalizedKey}"`);
+        } else {
+          result[key] = val;
+        }
+      }
+      return result;
+    },
+    [numberToModuleIdMap]
+  );
+
+  // ── Загрузка прогресса по модулям из Supabase ──────────────────────────
+  const loadUserProgress = useCallback(async (userId: string) => {
+    if (!userId) return;
+    try {
+      const url = `${SUPABASE_FN_BASE}/get-user-progress?userId=${encodeURIComponent(userId)}`;
+      const res = await fetch(url, {
+        headers: {
+          "x-site-key": SITE_KEY,
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+      });
+      if (!res.ok) {
+        console.warn(`[userProgress] GET failed: ${res.status}`);
+        return;
+      }
+      const data = await res.json();
+      // ── ДИАГНОСТИКА 1: Полный RAW-ответ API ─────────────────────────────
+      console.group("📦 [userProgress] RAW API response");
+      console.log("data.ok =", data?.ok);
+      console.log("data.userId =", data?.userId);
+      console.log("data.progress (raw) =", JSON.stringify(data?.progress, null, 2));
+      console.log("Ключи raw =", data?.progress ? Object.keys(data.progress) : "no progress");
+      console.groupEnd();
+
+      if (data?.ok && data?.progress && typeof data.progress === "object" && !Array.isArray(data.progress)) {
+        // Нормализуем ключи: module_N → module.id
+        const normalizedProgress = normalizeProgressKeys(
+          data.progress as Record<string, { progress: number; completed: boolean; updated_at?: string }>
+        );
+        // ── ДИАГНОСТИКА 2: Полный нормализованный объект ────────────────────
+        console.group("✅ [userProgress] NORMALIZED progress");
+        console.log("Ключи normalized =", Object.keys(normalizedProgress));
+        console.log("Полный normalized объект =", JSON.stringify(normalizedProgress, null, 2));
+        // Сверяем первые 5 module.id с ключами normalized
+        console.group("🔍 Сверка первых 5 module.id с normalized:");
+        courseModules.slice(0, 5).forEach(m => {
+          const found = normalizedProgress[m.id];
+          const foundFallback = normalizedProgress[`module_${m.number}`];
+          console.log(
+            `  module.id="${m.id}" (number=${m.number}) →`,
+            found ? `✅ HIT: progress=${found.progress} completed=${found.completed}` :
+            foundFallback ? `⚠️ fallback key "module_${m.number}": progress=${foundFallback.progress} completed=${foundFallback.completed}` :
+            "❌ MISS — ключ не найден в normalized"
+          );
+        });
+        console.groupEnd();
+        console.groupEnd();
+
+        // Сохраняем нормализованный ответ как источник правды
+        setUserProgressResponse({
+          ok: data.ok,
+          userId: data.userId,
+          progress: normalizedProgress,
+        });
+
+        // Строим плоский record для совместимости
+        const progressRecord: Record<string, { progress: number; completed: boolean }> = {};
+        for (const [modId, val] of Object.entries(normalizedProgress)) {
+          progressRecord[modId] = {
+            progress: Number(val.progress) || 0,
+            completed: Boolean(val.completed),
+          };
+        }
+
+        // Защита: не затираем непустой стейт пустым ответом
+        const hasNew = Object.keys(progressRecord).length > 0;
+        const hasCurrent = Object.keys(userProgressRef.current).length > 0;
+        if (hasNew || !hasCurrent) {
+          setUserProgress(progressRecord);
+          userProgressRef.current = progressRecord;
+          console.log(`[userProgress] ✅ загружено ${Object.keys(progressRecord).length} модулей:`, Object.keys(progressRecord));
+        } else {
+          console.log(`[userProgress] ⚠️ пустой ответ API, сохраняем текущий стейт`);
+        }
+        return;
+      }
+
+      // Fallback: старый массивный формат
+      const progressRecord: Record<string, { progress: number; completed: boolean }> = {};
+      if (Array.isArray(data)) {
+        for (const item of data as Array<{ module_id?: string; moduleId?: string; progress: number; completed: boolean }>) {
+          const rawId = item.module_id ?? item.moduleId;
+          if (!rawId) continue;
+          // Нормализуем module_N → module.id
+          const match = rawId.match(/^module_(\d+)$/);
+          let modId = rawId;
+          if (match) {
+            const num = parseInt(match[1], 10);
+            modId = numberToModuleIdMap[num] ?? rawId;
+          }
+          progressRecord[modId] = {
+            progress: Number(item.progress) || 0,
+            completed: Boolean(item.completed),
+          };
+        }
+      }
+      const hasNew = Object.keys(progressRecord).length > 0;
+      const hasCurrent = Object.keys(userProgressRef.current).length > 0;
+      if (hasNew || !hasCurrent) {
+        setUserProgress(progressRecord);
+        userProgressRef.current = progressRecord;
+        console.log(`[userProgress] ✅ загружено (fallback) ${Object.keys(progressRecord).length} модулей`);
+      } else {
+        console.log(`[userProgress] ⚠️ пустой ответ API (fallback), сохраняем текущий стейт`);
+      }
+    } catch (err) {
+      console.error(`[userProgress] load error:`, err);
+    }
+  }, [normalizeProgressKeys, numberToModuleIdMap]);
+
+  // ── Обновление прогресса модуля при переходе к следующему ─────────────
+  const updateModuleProgress = useCallback(async (moduleId: string): Promise<void> => {
+    if (!authState.userId) {
+      console.warn("[userProgress] updateModuleProgress: нет userId, пропускаем");
+      return;
+    }
+    // Оптимистичное обновление — сразу обновляем UI
+    const update = { progress: 100, completed: true };
+    setUserProgress(prev => {
+      const next = { ...prev, [moduleId]: update };
+      userProgressRef.current = next;
+      return next;
+    });
+    // Обновляем сырой ответ API оптимистично
+    setUserProgressResponse(prev => {
+      if (!prev) {
+        return { ok: true, userId: authState.userId ?? undefined, progress: { [moduleId]: update } };
+      }
+      return { ...prev, progress: { ...prev.progress, [moduleId]: update } };
+    });
+    console.log(`[userProgress] → сохраняем модуль ${moduleId} как завершённый`);
+    try {
+      const url = `${SUPABASE_FN_BASE}/update-user-progress`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-site-key": SITE_KEY,
+          Authorization: `Bearer ${authState.accessToken ?? publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          userId: authState.userId,
+          moduleId,
+          progress: 100,
+          completed: true,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[userProgress] POST update-user-progress failed: ${res.status} ${text}`);
+      } else {
+        console.log(`[userProgress] ✅ модуль ${moduleId} успешно сохранён`);
+      }
+    } catch (err) {
+      console.error(`[userProgress] POST error:`, err);
+      // Не откатываем оптимистичное обновление — сохраняем UI-стейт
+    }
+  }, [authState.userId, authState.accessToken]);
 
   // Save progress to Supabase when auth state or progress changes
   const scheduleProgressSync = useCallback((
@@ -316,13 +527,15 @@ export default function App() {
       } catch {}
       // Load access level
       await loadAccessLevel(state.accessToken, state.userId);
+      // Load module-level progress from Supabase
+      await loadUserProgress(state.userId);
       // Restore bonus lessons tied to exit-intent email (if any)
       await loadBonusAccessByEmail();
       // Clear persisted payment banner after login (access is now loaded)
       try { localStorage.removeItem("pending-payment-banner"); } catch {}
       setAppStep("course");
     }
-  }, [updateAuth, clearAllLocalData, applyServerProgress, loadAccessLevel, loadBonusAccessByEmail]);
+  }, [updateAuth, clearAllLocalData, applyServerProgress, loadAccessLevel, loadUserProgress, loadBonusAccessByEmail]);
 
   useEffect(() => {
     logActivity();
@@ -342,6 +555,8 @@ export default function App() {
           applyServerProgress(serverProgress);
         } catch {}
         await loadAccessLevel(sessionState.accessToken, sessionState.userId);
+        // Load module-level progress from Supabase
+        await loadUserProgress(sessionState.userId);
         await loadBonusAccessByEmail();
         try { localStorage.setItem("course-started", "1"); } catch {}
         setAppStep("course");
@@ -699,6 +914,7 @@ export default function App() {
               setPaywallModuleTitle("Полный доступ к курсу");
               setShowPaywall(true);
             }}
+            onModuleComplete={updateModuleProgress}
           />
         );
     }
@@ -889,12 +1105,21 @@ export default function App() {
         onOpenFlashcards={() => setView("flashcards")}
         onOpenCertificate={() => setView("certificate")}
         isDemoMode={isDemoMode}
+        userProgress={userProgress}
+        userProgressResponse={userProgressResponse}
         onGetFullAccess={() => {
           setPaywallModuleTitle("Полный доступ к курсу");
           setShowPaywall(true);
         }}
       />
       <main className="flex-1 min-w-0 overflow-hidden relative">
+        {/* Access-check loading banner — показывается пока идёт запрос к get-user-access */}
+        {accessLoading && (
+          <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 px-4 py-2 bg-teal-600/90 backdrop-blur-sm text-white text-xs font-medium shadow-md">
+            <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin flex-shrink-0" />
+            Проверяем доступ…
+          </div>
+        )}
         {/* Robokassa payment result banner */}
         {paymentBanner && (
           <div className={`absolute top-0 left-0 right-0 z-50 flex items-center gap-3 px-4 py-3 text-[0.875rem] font-medium shadow-md

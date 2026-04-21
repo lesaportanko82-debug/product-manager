@@ -7,6 +7,7 @@ import {
 import { PrivacyPolicyModal } from "./privacy-policy";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import { useCurrencyRates } from "./use-currency-rates";
+import { PRICING_PLANS, formatPriceRub, toPaymentAmount } from "./pricing-plans";
 
 // ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
 const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
@@ -71,7 +72,7 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
-  const { formatRub, formatKzt, loading: ratesLoading } = useCurrencyRates();
+  const { formatKzt, loading: ratesLoading } = useCurrencyRates();
 
   const handleTelegram = () => window.open("https://t.me/ohh_lessya", "_blank");
 
@@ -82,19 +83,24 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
     setError(null);
     setLoadingPlan("monthly");
 
+    const plan = PRICING_PLANS.monthly;
+
     try {
       const body = {
-        amount:      "7000.00",
-        description: "Доступ на месяц",
+        amount:      toPaymentAmount(plan.priceRub),
+        description: plan.description,
         orderId:     `month_${Date.now()}`,
         email:       userEmail,
-        plan:        "month",
+        plan:        plan.planId,
         userId,
-        accessDays:  30,
+        accessDays:  plan.accessDays,
         appUrl:      "https://www.product-intensive.com",
       };
 
-      // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
+      // ── [PRICE-CHECK] Debug log ──────────────────────────────────────────
+      console.log(`[paywall-screen] 💳 Выбран тариф: "${plan.title}"`);
+      console.log(`[paywall-screen] 💰 Цена из карточки: ${formatPriceRub(plan.priceRub)} (${plan.priceUsd}$)`);
+      console.log(`[paywall-screen] 📤 Сумма в YooKassa: ${body.amount} ₽`);
       console.log(`[paywall-screen] [ID-CHECK] userId sent to super-task (monthly) = "${userId}"`);
       console.log(`[paywall-screen] [ID-CHECK] userEmail = "${userEmail}"`);
       console.log("[paywall-screen] monthly →", body);
@@ -135,19 +141,24 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
     setError(null);
     setLoadingPlan("lifetime");
 
+    const plan = PRICING_PLANS.lifetime;
+
     try {
       const body = {
-        amount:      "9000.00",
-        description: "Вечный доступ",
+        amount:      toPaymentAmount(plan.priceRub),
+        description: plan.description,
         orderId:     `lifetime_${Date.now()}`,
         email:       userEmail,
-        plan:        "lifetime",
+        plan:        plan.planId,
         userId,
-        accessDays:  null,
+        accessDays:  plan.accessDays,
         appUrl:      "https://www.product-intensive.com",
       };
 
-      // ── [ID-CHECK] Log userId being sent to super-task ──────────────────
+      // ── [PRICE-CHECK] Debug log ──────────────────────────────────────────
+      console.log(`[paywall-screen] 💳 Выбран тариф: "${plan.title}"`);
+      console.log(`[paywall-screen] 💰 Цена из карточки: ${formatPriceRub(plan.priceRub)} (${plan.priceUsd}$)`);
+      console.log(`[paywall-screen] 📤 Сумма в YooKassa: ${body.amount} ₽`);
       console.log(`[paywall-screen] [ID-CHECK] userId sent to super-task (lifetime) = "${userId}"`);
       console.log(`[paywall-screen] [ID-CHECK] userEmail = "${userEmail}"`);
       console.log("[paywall-screen] lifetime →", body);
@@ -315,15 +326,15 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
                 </p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">$350</p>
-                <p className="text-[1.25rem] font-bold text-teal-600 dark:text-teal-400 leading-none">$85</p>
-                <p className="text-[0.65rem] text-amber-500 font-bold mt-0.5">ранний доступ</p>
-                {!ratesLoading && (
-                  <div className="mt-1 space-y-0.5">
-                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatRub(85)}</p>
-                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatKzt(85)}</p>
-                  </div>
-                )}
+                <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">${PRICING_PLANS.monthly.oldPriceUsd}</p>
+                <p className="text-[1.25rem] font-bold text-teal-600 dark:text-teal-400 leading-none">${PRICING_PLANS.monthly.priceUsd}</p>
+                <p className="text-[0.65rem] text-amber-500 font-bold mt-0.5">{PRICING_PLANS.monthly.badge}</p>
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-[0.65rem] text-teal-700 dark:text-teal-300 font-bold leading-none">{formatPriceRub(PRICING_PLANS.monthly.priceRub)}</p>
+                  {!ratesLoading && (
+                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatKzt(PRICING_PLANS.monthly.priceUsd)}</p>
+                  )}
+                </div>
               </div>
             </motion.button>
 
@@ -358,15 +369,15 @@ export function PaywallScreen({ moduleTitle, onBack, userId, userEmail }: Paywal
                 </p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">$400</p>
-                <p className="text-[1.25rem] font-bold text-emerald-600 dark:text-emerald-400 leading-none">$100</p>
-                <p className="text-[0.65rem] text-amber-500 font-bold mt-0.5">навсегда</p>
-                {!ratesLoading && (
-                  <div className="mt-1 space-y-0.5">
-                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatRub(100)}</p>
-                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatKzt(100)}</p>
-                  </div>
-                )}
+                <p className="text-[0.6875rem] text-muted-foreground/50 line-through leading-none mb-0.5">${PRICING_PLANS.lifetime.oldPriceUsd}</p>
+                <p className="text-[1.25rem] font-bold text-emerald-600 dark:text-emerald-400 leading-none">${PRICING_PLANS.lifetime.priceUsd}</p>
+                <p className="text-[0.65rem] text-amber-500 font-bold mt-0.5">{PRICING_PLANS.lifetime.badge}</p>
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-[0.65rem] text-emerald-700 dark:text-emerald-300 font-bold leading-none">{formatPriceRub(PRICING_PLANS.lifetime.priceRub)}</p>
+                  {!ratesLoading && (
+                    <p className="text-[0.65rem] text-muted-foreground/60 leading-none">{formatKzt(PRICING_PLANS.lifetime.priceUsd)}</p>
+                  )}
+                </div>
               </div>
             </motion.button>
 

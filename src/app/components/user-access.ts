@@ -1,11 +1,16 @@
 /**
  * user-access.ts
  *
- * PRIMARY:  Supabase REST API напрямую — читает user_access с токеном пользователя
- * FALLBACK: make-server /my-access?userId=... + x-site-key (service role, обходит RLS)
+ * ЕДИНСТВЕННЫЙ источник правды о доступе пользователя.
+ *
+ * PRIMARY:  GET https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/get-user-access?userId=...
+ *           Headers: x-site-key: rediska210426
+ *
+ * FALLBACK: если PRIMARY недоступен — возвращаем free (не пускаем угадыванием).
  */
 
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+const GET_USER_ACCESS_URL = "https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/get-user-access";
+const SITE_KEY = "rediska210426";
 
 export type AccessLevel = "free" | "monthly" | "lifetime";
 
@@ -15,116 +20,91 @@ export interface UserAccessResult {
 }
 
 const FREE: UserAccessResult = { accessLevel: "free", canAccessPaidContent: false };
-const BASE = `https://${projectId}.supabase.co`;
-// SITE_KEY removed — x-site-key header no longer sent from frontend
 
-function levelFromPlanStatus(
-  plan: string | undefined | null,
-  status: string | undefined | null,
-  expiresAt?: string | null
-): UserAccessResult {
-  if (!plan) return FREE;
-  const p = (plan ?? "").toLowerCase().trim();
-  const active = (status ?? "").toLowerCase() === "active";
-  if (!active) return FREE;
-
-  if (p === "lifetime" || p === "forever" || p === "full") {
-    return { accessLevel: "lifetime", canAccessPaidContent: true };
-  }
-  if (p === "month" || p === "monthly" || p === "paid") {
-    const ok = !expiresAt || new Date(expiresAt) > new Date();
-    return ok ? { accessLevel: "monthly", canAccessPaidContent: true } : FREE;
-  }
-  // Неизвестный plan, но active — открываем
-  return { accessLevel: "lifetime", canAccessPaidContent: true };
+/** Нормализует строку уровня доступа в AccessLevel */
+function parseLevel(raw: unknown): AccessLevel {
+  const s = String(raw ?? "").toLowerCase().trim();
+  if (s === "lifetime" || s === "forever" || s === "full") return "lifetime";
+  if (s === "monthly" || s === "month" || s === "paid") return "monthly";
+  return "free";
 }
 
-function levelFromString(level: string): UserAccessResult {
-  const l = level.toLowerCase().trim();
-  if (l === "lifetime") return { accessLevel: "lifetime", canAccessPaidContent: true };
-  if (l === "monthly" || l === "month") return { accessLevel: "monthly", canAccessPaidContent: true };
-  return FREE;
-}
-
+/**
+ * Загружает уровень доступа пользователя через Edge Function get-user-access.
+ *
+ * @param userId  UUID текущего авторизованного пользователя (из Supabase Auth)
+ * @returns       { accessLevel, canAccessPaidContent }
+ */
 export async function fetchUserAccess(
-  accessToken: string,
+  _accessToken: string,   // сохраняем сигнатуру для совместимости с App.tsx
   userId: string,
 ): Promise<UserAccessResult> {
   console.log(`[user-access] ══ fetchUserAccess userId="${userId}" ══`);
 
   if (!userId) {
-    console.warn(`[user-access] userId пустой → free`);
+    console.warn("[user-access] userId пустой → free");
     return FREE;
   }
 
-  // ── PRIMARY: Supabase REST API (PostgREST) ────────────────────────────
-  // Прямой запрос к Postgres, авторизация токеном пользователя.
-  // Работает если RLS разрешает пользователю читать свою строку.
-  if (accessToken) {
-    try {
-      const url = `${BASE}/rest/v1/user_access?user_id=eq.${encodeURIComponent(userId)}&select=plan,status,expires_at&limit=1`;
-      console.log(`[user-access] PRIMARY → GET ${url}`);
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "apikey": publicAnonKey,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const text = await res.text();
-      console.log(`[user-access] PRIMARY ← HTTP ${res.status}: ${text}`);
-
-      if (res.ok) {
-        const rows = JSON.parse(text) as Array<{ plan: string; status: string; expires_at: string | null }>;
-        if (Array.isArray(rows) && rows.length > 0) {
-          const row = rows[0];
-          const result = levelFromPlanStatus(row.plan, row.status, row.expires_at);
-          console.log(`[user-access] PRIMARY: plan="${row.plan}" status="${row.status}" → canAccess=${result.canAccessPaidContent}`);
-          // Если нашли строку — доверяем ей (даже если free)
-          return result;
-        }
-        console.log(`[user-access] PRIMARY: строка не найдена → FALLBACK`);
-      } else {
-        console.warn(`[user-access] PRIMARY HTTP ${res.status} → FALLBACK`);
-      }
-    } catch (err) {
-      console.error(`[user-access] PRIMARY error:`, err);
-    }
-  }
-
-  // ── FALLBACK: make-server /my-access ─────────────────────────────────
-  // Использует SERVICE_ROLE_KEY на сервере → обходит RLS.
-  // НЕ требует валидации токена — только userId + site-key.
+  // ── PRIMARY: get-user-access Edge Function ────────────────────────────
   try {
-    const url = `${BASE}/functions/v1/make-server-279b4dfa/my-access?userId=${encodeURIComponent(userId)}`;
-    console.log(`[user-access] FALLBACK → GET ${url}`);
+    const url = `${GET_USER_ACCESS_URL}?userId=${encodeURIComponent(userId)}`;
+    console.log(`[user-access] PRIMARY → GET ${url}`);
 
     const res = await fetch(url, {
       method: "GET",
       headers: {
-        // Supabase gateway требует Authorization (anon key) ДО нашего роутера
-        "Authorization": `Bearer ${publicAnonKey}`,
+        "x-site-key": SITE_KEY,
         "Content-Type": "application/json",
       },
     });
 
     const text = await res.text();
-    console.log(`[user-access] FALLBACK ← HTTP ${res.status}: ${text}`);
+    console.log(`[user-access] PRIMARY ← HTTP ${res.status}: ${text}`);
 
     if (res.ok) {
-      const data = JSON.parse(text) as Record<string, unknown>;
-      const result = levelFromString(String(data.level ?? ""));
-      console.log(`[user-access] FALLBACK: level="${data.level}" source="${data.source}" → canAccess=${result.canAccessPaidContent}`);
-      return result;
-    }
-    console.error(`[user-access] FALLBACK HTTP ${res.status}`);
-  } catch (err) {
-    console.error(`[user-access] FALLBACK error:`, err);
-  }
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.warn("[user-access] PRIMARY: невалидный JSON → free");
+        return FREE;
+      }
 
-  console.log(`[user-access] ❌ оба источника не дали доступа → free`);
-  return FREE;
+      // Endpoint возвращает canAccessPaidContent напрямую
+      if (typeof data.canAccessPaidContent === "boolean") {
+        const level = parseLevel(data.level ?? data.accessLevel ?? data.plan ?? "");
+        const canAccess = data.canAccessPaidContent;
+        // Дополнительная проверка: canAccess=true, но level=free → lifetime как запасной
+        const resolvedLevel: AccessLevel = canAccess
+          ? (level !== "free" ? level : "lifetime")
+          : "free";
+
+        console.log(
+          `[user-access] PRIMARY ✅ canAccessPaidContent=${canAccess} level="${resolvedLevel}"`
+        );
+        return { accessLevel: resolvedLevel, canAccessPaidContent: canAccess };
+      }
+
+      // Иногда endpoint возвращает только level/plan
+      if (data.level || data.plan || data.accessLevel) {
+        const level = parseLevel(data.level ?? data.accessLevel ?? data.plan);
+        const canAccess = level !== "free";
+        console.log(
+          `[user-access] PRIMARY ✅ (level-only) level="${level}" canAccess=${canAccess}`
+        );
+        return { accessLevel: level, canAccessPaidContent: canAccess };
+      }
+
+      console.warn("[user-access] PRIMARY: ответ не содержит canAccessPaidContent или level → free");
+      return FREE;
+    }
+
+    // HTTP-ошибка
+    console.warn(`[user-access] PRIMARY HTTP ${res.status} → fallback free`);
+    return FREE;
+  } catch (err) {
+    console.error("[user-access] PRIMARY network error:", err);
+    return FREE;
+  }
 }

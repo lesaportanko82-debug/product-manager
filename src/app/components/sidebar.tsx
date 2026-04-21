@@ -62,9 +62,15 @@ interface SidebarProps {
   examScore?: number | null;
   isDemoMode?: boolean;
   onGetFullAccess?: () => void;
+  userProgress?: Record<string, { progress: number; completed: boolean }>;
+  userProgressResponse?: {
+    ok: boolean;
+    userId?: string;
+    progress: Record<string, { progress: number; completed: boolean; updated_at?: string }>;
+  } | null;
 }
 
-export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOpenFinalExam, showFinalExam, bookmarks, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenLeaderboard, onOpenOnboarding, onOpenCapstone, onOpenDiagnostic, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, isDark, onToggleDark, authState, onOpenAuth, onSignOut, onOpenProfile, onNameChange, accessLevel = "free", freeLessonIds, examScore = null, isDemoMode = false, onGetFullAccess }: SidebarProps) {
+export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOpenFinalExam, showFinalExam, bookmarks, onOpenGlossary, onOpenFlashcards, onOpenCertificate, onOpenLeaderboard, onOpenOnboarding, onOpenCapstone, onOpenDiagnostic, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, isDark, onToggleDark, authState, onOpenAuth, onSignOut, onOpenProfile, onNameChange, accessLevel = "free", freeLessonIds, examScore = null, isDemoMode = false, onGetFullAccess, userProgress = {}, userProgressResponse }: SidebarProps) {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(
     // For free/demo users: also pre-expand the simulator module so it's immediately visible
     () => {
@@ -126,10 +132,66 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
   };
 
   const getModuleProgress = (module: Module) => {
+    // Источник правды — userProgressResponse (сырой ответ API get-user-progress)
+    if (userProgressResponse?.progress) {
+      // Пробуем module.id напрямую, затем резервный ключ module_N (по номеру модуля)
+      const up = userProgressResponse.progress[module.id]
+        ?? userProgressResponse.progress[`module_${module.number}`];
+      const total = module.lessons.length;
+      if (up !== undefined) {
+        const pct = Number(up.progress) || 0;
+        const isCompleted = Boolean(up.completed);
+        if (isCompleted) return { completed: total, total, pct: 100, isCompleted: true };
+        const completedCount = Math.max(Math.round((pct / 100) * total), 0);
+        return { completed: completedCount, total, pct, isCompleted: false };
+      }
+      // Ключа нет → progress = 0, completed = false (безопасный fallback)
+      return { completed: 0, total, pct: 0, isCompleted: false };
+    }
+    // Fallback: userProgress (нормализованный record)
+    if (Object.keys(userProgress).length > 0) {
+      const up = userProgress[module.id] ?? userProgress[`module_${module.number}`];
+      if (up) {
+        const total = module.lessons.length;
+        if (up.completed) return { completed: total, total, pct: 100, isCompleted: true };
+        const completedCount = Math.round((up.progress / 100) * total);
+        return { completed: Math.max(completedCount, 0), total, pct: up.progress, isCompleted: false };
+      }
+    }
+    // Последний fallback: вычисляем из completedLessons (локальный стейт)
     const original = courseModules.find(m => m.id === module.id) || module;
-    const completed = original.lessons.filter(l => completedLessons.has(l.id)).length;
-    return { completed, total: original.lessons.length };
+    const completedCount = original.lessons.filter(l => completedLessons.has(l.id)).length;
+    const total = original.lessons.length;
+    const pct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+    return { completed: completedCount, total, pct, isCompleted: completedCount === total && total > 0 };
   };
+
+  // ── ДИАГНОСТИКА 3: первые 5 модулей sidebar lookup ──────────────────────
+  // Запускаем один раз после получения userProgressResponse
+  const _diagRef = useRef(false);
+  useEffect(() => {
+    if (!userProgressResponse?.progress) return;
+    if (_diagRef.current) return;
+    _diagRef.current = true;
+    console.group("🗂️ [Sidebar] getModuleProgress — первые 5 модулей");
+    console.log("userProgressResponse.progress keys:", Object.keys(userProgressResponse.progress));
+    console.log("userProgress keys:", Object.keys(userProgress));
+    courseModules.slice(0, 5).forEach(m => {
+      const byId = userProgressResponse.progress[m.id];
+      const byNum = userProgressResponse.progress[`module_${m.number}`];
+      const used = byId ?? byNum;
+      const result = getModuleProgress(m);
+      console.log(
+        `  module.id="${m.id}" (number=${m.number})`,
+        `\n    →  byId:`, byId ? JSON.stringify(byId) : "undefined",
+        `\n    →  byNum (module_${m.number}):`, byNum ? JSON.stringify(byNum) : "undefined",
+        `\n    →  USED:`, used ? JSON.stringify(used) : "❌ MISS",
+        `\n    →  getModuleProgress result:`, JSON.stringify(result)
+      );
+    });
+    console.groupEnd();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProgressResponse]);
 
   const searchFilteredModules = useMemo(() => {
     if (!searchQuery.trim()) return courseModules;
@@ -172,7 +234,53 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
   );
 
   const totalLessons = useMemo(() => courseModules.reduce((a, m) => a + m.lessons.length, 0), []);
-  const progressPct = totalLessons > 0 ? Math.round((completedLessons.size / totalLessons) * 100) : 0;
+
+  // Общий прогресс курса: приоритет — серверные данные по модулям (userProgressResponse),
+  // затем userProgress (нормализованный record), иначе — локальный completedLessons.
+  const progressPct = useMemo(() => {
+    // 1. Серверный источник правды — userProgressResponse
+    if (userProgressResponse?.progress && Object.keys(userProgressResponse.progress).length > 0) {
+      let totalCompleted = 0;
+      let total = 0;
+      courseModules.forEach(m => {
+        const up = userProgressResponse.progress[m.id]
+          ?? userProgressResponse.progress[`module_${m.number}`];
+        total += m.lessons.length;
+        if (up) {
+          if (up.completed) {
+            totalCompleted += m.lessons.length;
+          } else {
+            totalCompleted += Math.max(Math.round((Number(up.progress) / 100) * m.lessons.length), 0);
+          }
+        } else {
+          // Модуля нет в серверном ответе — берём из локального completedLessons
+          totalCompleted += m.lessons.filter(l => completedLessons.has(l.id)).length;
+        }
+      });
+      return total > 0 ? Math.round((totalCompleted / total) * 100) : 0;
+    }
+    // 2. Нормализованный userProgress record
+    if (Object.keys(userProgress).length > 0) {
+      let totalCompleted = 0;
+      let total = 0;
+      courseModules.forEach(m => {
+        const up = userProgress[m.id] ?? userProgress[`module_${m.number}`];
+        total += m.lessons.length;
+        if (up) {
+          if (up.completed) {
+            totalCompleted += m.lessons.length;
+          } else {
+            totalCompleted += Math.max(Math.round((up.progress / 100) * m.lessons.length), 0);
+          }
+        } else {
+          totalCompleted += m.lessons.filter(l => completedLessons.has(l.id)).length;
+        }
+      });
+      return total > 0 ? Math.round((totalCompleted / total) * 100) : 0;
+    }
+    // 3. Локальный fallback — completedLessons
+    return totalLessons > 0 ? Math.round((completedLessons.size / totalLessons) * 100) : 0;
+  }, [userProgressResponse, userProgress, completedLessons, totalLessons]);
 
   // 11 logical blocks of the course
   const [expandedBlocks, setExpandedBlocks] = useState<Set<number>>(
@@ -569,8 +677,8 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
                         {block.modules.map((module) => {
                           const isExpandedModule = effectiveExpanded.has(module.id);
                           const progress = getModuleProgress(module);
-                          const isModuleComplete = progress.completed === progress.total;
-                          const pctModule = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
+                          const isModuleComplete = progress.isCompleted ?? (progress.completed === progress.total && progress.total > 0);
+                          const pctModule = progress.pct ?? (progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0);
                           const ModIcon = iconMap[module.icon] || BookOpen;
 
                           // Module is paid-locked only if it has NO free lessons at all
@@ -625,18 +733,26 @@ export function Sidebar({ selectedLesson, onSelectLesson, completedLessons, onOp
                                     <span className="text-[0.75rem] truncate font-medium leading-tight">{module.title}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 mt-0.5">
-                                    {/* Progress bar: min 4px height per MD3 Linear Progress spec */}
-                                    <div className="flex-1 h-1 bg-border/40 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full transition-all duration-500 ${
-                                          isModuleComplete ? 'bg-emerald-500' : 'bg-teal-500'
-                                        }`}
-                                        style={{ width: `${pctModule}%` }}
-                                      />
-                                    </div>
-                                    <span className="text-[0.625rem] text-muted-foreground/50 shrink-0 tabular-nums leading-none">
-                                      {progress.completed}/{progress.total}
-                                    </span>
+                                    {isModuleComplete ? (
+                                      /* Завершено — показываем статус вместо прогресс-бара */
+                                      <span className="flex items-center gap-0.5 text-[0.625rem] font-semibold text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle className="w-2.5 h-2.5 shrink-0" />
+                                        Завершено
+                                      </span>
+                                    ) : (
+                                      <>
+                                        {/* Progress bar: min 4px height per MD3 Linear Progress spec */}
+                                        <div className="flex-1 h-1 bg-border/40 rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full rounded-full transition-all duration-500 bg-teal-500"
+                                            style={{ width: `${pctModule}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-[0.625rem] text-muted-foreground/50 shrink-0 tabular-nums leading-none">
+                                          {pctModule > 0 ? `${pctModule}%` : `${progress.completed}/${progress.total}`}
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="shrink-0 text-muted-foreground/30">

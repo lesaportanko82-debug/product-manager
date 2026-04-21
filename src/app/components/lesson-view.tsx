@@ -74,6 +74,7 @@ interface LessonViewProps {
   accessLevel?: "free" | "monthly" | "lifetime";
   isDemoMode?: boolean;
   onGoToSignup?: () => void;
+  onModuleComplete?: (moduleId: string) => Promise<void>;
 }
 
 function QuizSection({ quiz, title, lessonId, lessonTitle }: { quiz: QuizQuestion[]; title?: string; lessonId: string; lessonTitle: string }) {
@@ -310,7 +311,7 @@ function LessonTOC({ content, containerRef }: { content: string[]; containerRef:
   );
 }
 
-export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggleComplete, onOpenFinalExam, bookmarks, onToggleBookmark, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenOnboarding, onOpenGlossary, onOpenFlashcards, onOpenCertificate, accessLevel = "free", isDemoMode = false, onGoToSignup }: LessonViewProps) {
+export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggleComplete, onOpenFinalExam, bookmarks, onToggleBookmark, onOpenDiagnostic, onOpenCapstone, onOpenCoach, onOpenNotebook, onOpenInterview, onOpenTemplates, onOpenAnalytics, onOpenDataExercises, onOpenPortfolio, onOpenResumeReview, onOpenCompetencyRadar, onOpenOnboarding, onOpenGlossary, onOpenFlashcards, onOpenCertificate, accessLevel = "free", isDemoMode = false, onGoToSignup, onModuleComplete }: LessonViewProps) {
   const allLessons = getAllLessons();
   const currentIndex = allLessons.findIndex(l => l.lesson.id === lessonId);
   const current = allLessons[currentIndex];
@@ -367,11 +368,19 @@ export function LessonView({ lessonId, onSelectLesson, completedLessons, onToggl
   const currentModuleNotDone = currentModuleCompleted < currentModuleTotal;
 
   // Auto-mark current as done and navigate
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     if (!nextLesson) return;
     if (!isCompleted) onToggleComplete(lesson.id);
+    // When crossing module boundary — save current module as completed first
+    if (isCrossModule && onModuleComplete) {
+      try {
+        await onModuleComplete(module.id);
+      } catch (err) {
+        console.error("[LessonView] onModuleComplete error:", err);
+      }
+    }
     onSelectLesson(nextLesson.lesson.id);
-  }, [nextLesson, isCompleted, lesson.id, onToggleComplete, onSelectLesson]);
+  }, [nextLesson, isCompleted, lesson.id, onToggleComplete, onSelectLesson, isCrossModule, onModuleComplete, module.id]);
 
   return (
     <div ref={containerRef} className="flex-1 min-h-screen max-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-teal-100/50 dark:from-slate-900 dark:via-slate-800 dark:to-teal-950/50 overflow-y-auto">
