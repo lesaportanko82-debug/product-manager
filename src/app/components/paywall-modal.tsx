@@ -61,11 +61,11 @@ const PERKS = [
 ];
 
 export function PaywallModal({
-  isOpen, onClose, moduleTitle, userId, userEmail,
+  isOpen, onClose, moduleTitle, userId, userEmail, accessToken,
 }: PaywallModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
   const [error, setError]             = useState<string | null>(null);
-  const { formatKzt, loading: ratesLoading } = useCurrencyRates();
+  const { formatKzt, formatRub, getPlanPriceRub, rates, loading: ratesLoading } = useCurrencyRates();
 
   // ── Месячный тариф ────────────────────────────────────────────────────────
   const handleMonthly = async () => {
@@ -78,32 +78,37 @@ export function PaywallModal({
     setLoadingPlan("monthly");
 
     const plan = PRICING_PLANS.monthly;
+    // Используем динамическую рублёвую цену от ЦБ РФ; fallback — фиксированная
+    const rubPrice = getPlanPriceRub("monthly") ?? plan.priceRub;
 
     try {
       const body = {
-        amount:      toPaymentAmount(plan.priceRub),
+        amount:      rubPrice.toFixed(2),
         description: plan.description,
         orderId:     `month_${Date.now()}`,
         email:       userEmail,
         plan:        plan.planId,
         userId,
+        accessToken,
         accessDays:  plan.accessDays,
         appUrl:      "https://www.product-intensive.com",
       };
 
       // ── [PRICE-CHECK] Debug log ──────────────────────────────────────────
-      console.log(`[paywall-modal] 💳 Выбран тариф: "${plan.title}"`);
-      console.log(`[paywall-modal] 💰 Цена из карточки: ${formatPriceRub(plan.priceRub)} (${plan.priceUsd}$)`);
-      console.log(`[paywall-modal] 📤 Сумма в YooKassa: ${body.amount} ₽`);
+      console.log(`[paywall-modal] Выбран тариф: "${plan.title}"`);
+      console.log(`[paywall-modal] Цена по курсу ЦБ: ${rubPrice} руб (${plan.priceUsd}$ x ${rates?.rub?.toFixed(2) ?? "?"})`);
+      console.log(`[paywall-modal] Сумма в YooKassa: ${body.amount} руб`);
       console.log(`[paywall-modal] [ID-CHECK] userId sent to super-task (monthly) = "${userId}"`);
       console.log(`[paywall-modal] [ID-CHECK] userEmail = "${userEmail}"`);
-      console.log("[payment] monthly →", body);
+      console.log(`[paywall-modal] [ID-CHECK] accessToken present = ${!!accessToken}`);
+      console.log("[payment] monthly →", { ...body, accessToken: accessToken ? "[PRESENT]" : "[MISSING]" });
 
       const res = await fetch(PAYMENT_PROXY_URL, {
         method:  "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`,
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${accessToken ?? publicAnonKey}`,
+          "x-site-key":    "rediska210426",
         },
         body: JSON.stringify(body),
       });
@@ -141,32 +146,37 @@ export function PaywallModal({
     setLoadingPlan("lifetime");
 
     const plan = PRICING_PLANS.lifetime;
+    // Используем динамическую рублёвую цену от ЦБ РФ; fallback — фиксированная
+    const rubPrice = getPlanPriceRub("lifetime") ?? plan.priceRub;
 
     try {
       const body = {
-        amount:      toPaymentAmount(plan.priceRub),
+        amount:      rubPrice.toFixed(2),
         description: plan.description,
         orderId:     `lifetime_${Date.now()}`,
         email:       userEmail,
         plan:        plan.planId,
         userId,
+        accessToken,
         accessDays:  plan.accessDays,
         appUrl:      "https://www.product-intensive.com",
       };
 
       // ── [PRICE-CHECK] Debug log ──────────────────────────────────────────
-      console.log(`[paywall-modal] 💳 Выбран тариф: "${plan.title}"`);
-      console.log(`[paywall-modal] 💰 Цена из карточки: ${formatPriceRub(plan.priceRub)} (${plan.priceUsd}$)`);
-      console.log(`[paywall-modal] 📤 Сумма в YooKassa: ${body.amount} ₽`);
+      console.log(`[paywall-modal] Выбран тариф: "${plan.title}"`);
+      console.log(`[paywall-modal] Цена по курсу ЦБ: ${rubPrice} руб (${plan.priceUsd}$ x ${rates?.rub?.toFixed(2) ?? "?"})`);
+      console.log(`[paywall-modal] Сумма в YooKassa: ${body.amount} руб`);
       console.log(`[paywall-modal] [ID-CHECK] userId sent to super-task (lifetime) = "${userId}"`);
       console.log(`[paywall-modal] [ID-CHECK] userEmail = "${userEmail}"`);
-      console.log("[payment] lifetime →", body);
+      console.log(`[paywall-modal] [ID-CHECK] accessToken present = ${!!accessToken}`);
+      console.log("[payment] lifetime →", { ...body, accessToken: accessToken ? "[PRESENT]" : "[MISSING]" });
 
       const res = await fetch(PAYMENT_PROXY_URL, {
         method:  "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`,
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${accessToken ?? publicAnonKey}`,
+          "x-site-key":    "rediska210426",
         },
         body: JSON.stringify(body),
       });
@@ -318,7 +328,11 @@ export function PaywallModal({
                   <p className="text-[1.125rem] font-bold text-teal-600 dark:text-teal-400 leading-none">${PRICING_PLANS.monthly.priceUsd}</p>
                   <p className="text-[0.6rem] text-amber-500 font-semibold mt-0.5">{PRICING_PLANS.monthly.badge}</p>
                   <div className="mt-1 space-y-0.5 text-right">
-                    <p className="text-[0.6rem] text-teal-700 dark:text-teal-300 font-bold leading-none">{formatPriceRub(PRICING_PLANS.monthly.priceRub)}</p>
+                    <p className="text-[0.6rem] text-teal-700 dark:text-teal-300 font-bold leading-none">
+                      {ratesLoading
+                        ? "..."
+                        : (getPlanPriceRub("monthly") ?? PRICING_PLANS.monthly.priceRub).toLocaleString("ru-RU") + " \u20bd"}
+                    </p>
                     {!ratesLoading && (
                       <p className="text-[0.6rem] text-muted-foreground/60 leading-none">{formatKzt(PRICING_PLANS.monthly.priceUsd)}</p>
                     )}
@@ -361,7 +375,11 @@ export function PaywallModal({
                   <p className="text-[1.125rem] font-bold text-emerald-600 dark:text-emerald-400 leading-none">${PRICING_PLANS.lifetime.priceUsd}</p>
                   <p className="text-[0.6rem] text-amber-500 font-semibold mt-0.5">{PRICING_PLANS.lifetime.badge}</p>
                   <div className="mt-1 space-y-0.5 text-right">
-                    <p className="text-[0.6rem] text-emerald-700 dark:text-emerald-300 font-bold leading-none">{formatPriceRub(PRICING_PLANS.lifetime.priceRub)}</p>
+                    <p className="text-[0.6rem] text-emerald-700 dark:text-emerald-300 font-bold leading-none">
+                      {ratesLoading
+                        ? "..."
+                        : (getPlanPriceRub("lifetime") ?? PRICING_PLANS.lifetime.priceRub).toLocaleString("ru-RU") + " \u20bd"}
+                    </p>
                     {!ratesLoading && (
                       <p className="text-[0.6rem] text-muted-foreground/60 leading-none">{formatKzt(PRICING_PLANS.lifetime.priceUsd)}</p>
                     )}

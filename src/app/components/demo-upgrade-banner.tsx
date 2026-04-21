@@ -8,6 +8,7 @@ import { useState } from "react";
 import { PrivacyPolicyModal } from "./privacy-policy";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import { PRICING_PLANS, formatPriceRub, toPaymentAmount } from "./pricing-plans";
+import { useCurrencyRates } from "./use-currency-rates";
 
 // ─── Платежи через make-server прокси (site-key добавляется на сервере) ────
 const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-server-279b4dfa/payment/init`;
@@ -27,10 +28,11 @@ interface DemoUpgradeBannerProps {
   accessToken?: string;
 }
 
-export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgradeBannerProps) {
+export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail, accessToken }: DemoUpgradeBannerProps) {
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "lifetime" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const { getPlanPriceRub } = useCurrencyRates();
 
   const isLoggedIn = !!(userId && userEmail);
   const isLoading = loadingPlan !== null;
@@ -40,29 +42,37 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgra
     setError(null);
     setLoadingPlan("monthly");
     const plan = PRICING_PLANS.monthly;
+    const rubPrice = getPlanPriceRub("monthly") ?? plan.priceRub;
     try {
       const body = {
-        amount: toPaymentAmount(plan.priceRub),
+        amount: rubPrice.toFixed(2),
         description: plan.description,
         orderId: `month_${Date.now()}`,
         email: userEmail,
         plan: plan.planId,
         userId,
+        accessToken,
         accessDays: plan.accessDays,
         appUrl: "https://www.product-intensive.com",
       };
-      console.log(`[demo-banner] 💳 Выбран тариф: "${plan.title}"`);
-      console.log(`[demo-banner] 💰 Цена из карточки: ${formatPriceRub(plan.priceRub)} (${plan.priceUsd}$)`);
-      console.log(`[demo-banner] 📤 Сумма в YooKassa: ${body.amount} ₽`);
+      console.log(`[demo-banner] Выбран тариф: "${plan.title}"`);
+      console.log(`[demo-banner] Цена по курсу ЦБ: ${rubPrice} руб (${plan.priceUsd}$)`);
+      console.log(`[demo-banner] Сумма в YooKassa: ${body.amount} руб`);
+      console.log(`[demo-banner] accessToken present = ${!!accessToken}`);
       const res = await fetch(PAYMENT_PROXY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${publicAnonKey}` },
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${accessToken ?? publicAnonKey}`,
+          "x-site-key":    "rediska210426",
+        },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(async () => {
         const text = await res.text().catch(() => "");
         throw new Error(`Не JSON (${res.status}): ${text.slice(0, 200)}`);
       });
+      console.log("[demo-banner] monthly ответ:", res.status, data);
       if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`);
       const url = data.confirmationUrl;
       if (!url) throw new Error("confirmationUrl отсутствует в ответе");
@@ -78,29 +88,37 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgra
     setError(null);
     setLoadingPlan("lifetime");
     const plan = PRICING_PLANS.lifetime;
+    const rubPrice = getPlanPriceRub("lifetime") ?? plan.priceRub;
     try {
       const body = {
-        amount: toPaymentAmount(plan.priceRub),
+        amount: rubPrice.toFixed(2),
         description: plan.description,
         orderId: `lifetime_${Date.now()}`,
         email: userEmail,
         plan: plan.planId,
         userId,
+        accessToken,
         accessDays: plan.accessDays,
         appUrl: "https://www.product-intensive.com",
       };
-      console.log(`[demo-banner] 💳 Выбран тариф: "${plan.title}"`);
-      console.log(`[demo-banner] 💰 Цена из карточки: ${formatPriceRub(plan.priceRub)} (${plan.priceUsd}$)`);
-      console.log(`[demo-banner] 📤 Сумма в YooKassa: ${body.amount} ₽`);
+      console.log(`[demo-banner] Выбран тариф: "${plan.title}"`);
+      console.log(`[demo-banner] Цена по курсу ЦБ: ${rubPrice} руб (${plan.priceUsd}$)`);
+      console.log(`[demo-banner] Сумма в YooKassa: ${body.amount} руб`);
+      console.log(`[demo-banner] accessToken present = ${!!accessToken}`);
       const res = await fetch(PAYMENT_PROXY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${publicAnonKey}` },
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${accessToken ?? publicAnonKey}`,
+          "x-site-key":    "rediska210426",
+        },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(async () => {
         const text = await res.text().catch(() => "");
         throw new Error(`Не JSON (${res.status}): ${text.slice(0, 200)}`);
       });
+      console.log("[demo-banner] lifetime ответ:", res.status, data);
       if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`);
       const url = data.confirmationUrl;
       if (!url) throw new Error("confirmationUrl отсутствует в ответе");
@@ -235,7 +253,9 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgra
                 </p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <p className="text-[1.25rem] font-bold text-teal-600 dark:text-teal-400">{formatPriceRub(PRICING_PLANS.monthly.priceRub)}</p>
+                <p className="text-[1.25rem] font-bold text-teal-600 dark:text-teal-400">
+                  {(getPlanPriceRub("monthly") ?? PRICING_PLANS.monthly.priceRub).toLocaleString("ru-RU") + " \u20bd"}
+                </p>
                 <p className="text-[0.6875rem] text-muted-foreground/60">{PRICING_PLANS.monthly.label}</p>
               </div>
             </motion.button>
@@ -265,7 +285,9 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail }: DemoUpgra
                 </p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <p className="text-[1.25rem] font-bold text-emerald-600 dark:text-emerald-400">{formatPriceRub(PRICING_PLANS.lifetime.priceRub)}</p>
+                <p className="text-[1.25rem] font-bold text-emerald-600 dark:text-emerald-400">
+                  {(getPlanPriceRub("lifetime") ?? PRICING_PLANS.lifetime.priceRub).toLocaleString("ru-RU") + " \u20bd"}
+                </p>
                 <p className="text-[0.6875rem] text-muted-foreground/60">{PRICING_PLANS.lifetime.label}</p>
               </div>
             </motion.button>

@@ -5,16 +5,41 @@
 import type { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 
-// SERVER-SIDE PRICING — source of truth for plan prices (sync with /src/app/components/pricing-plans.ts)
-const SERVER_PRICE_MONTH_RUB = 7000;
-const SERVER_PRICE_LIFETIME_RUB = 9000;
+// SERVER-SIDE PRICING — USD prices are the source of truth; RUB is calculated via CBR rate
+const PRICE_MONTH_USD = 85;
+const PRICE_LIFETIME_USD = 100;
 
-function getPriceRub(plan: string): string {
-  return (plan === "lifetime" ? SERVER_PRICE_LIFETIME_RUB : SERVER_PRICE_MONTH_RUB).toFixed(2);
+// Fallback RUB rate if exchange rate fetch fails
+const FALLBACK_RATE_USD_RUB = 92;
+
+/** Fetch current USD/RUB rate from Central Bank of Russia */
+async function fetchUsdToRub(): Promise<number> {
+  try {
+    const res = await fetch("https://www.cbr-xml-daily.ru/daily_json.js", {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) throw new Error(`CBR HTTP ${res.status}`);
+    const data = await res.json();
+    const rate = data?.Valute?.USD?.Value;
+    if (!rate || typeof rate !== "number") throw new Error("No USD value in CBR response");
+    console.log(`[exchange-rate] CBR USD/RUB = ${rate}`);
+    return rate;
+  } catch (err) {
+    console.log(`[exchange-rate] CBR fetch failed: ${err}. Using fallback ${FALLBACK_RATE_USD_RUB}`);
+    return FALLBACK_RATE_USD_RUB;
+  }
 }
+
+/** Returns RUB price string for YooKassa/Robokassa based on live CBR rate */
+async function getPriceRub(plan: string): Promise<string> {
+  const rate = await fetchUsdToRub();
+  const usd = plan === "lifetime" ? PRICE_LIFETIME_USD : PRICE_MONTH_USD;
+  return Math.round(usd * rate).toFixed(2);
+}
+
 function getPriceDescription(plan: string): string {
   if (plan === "lifetime") return "Vechnyy dostup k kursu po produkt-menedzhmentu";
-  return "Dostup k kursu po produkt-menedzhmentu na 30 dney";
+  return "Dostup k kursu po produkt-menedжменту на 30 dney";
 }
 
 async function robokassaSign(str: string): Promise<string> {
@@ -63,7 +88,7 @@ export function registerPaymentRoutes(app: Hono) {
       }
 
       // Amounts in RUB — берётся из SERVER_PRICING (source of truth)
-      const amount = getPriceRub(plan);
+      const amount = await getPriceRub(plan);
       const description = getPriceDescription(plan);
       console.log(`[robokassa] plan=${plan} amount=${amount} RUB desc=${description}`);
 
@@ -309,11 +334,18 @@ export function registerPaymentRoutes(app: Hono) {
   app.post("/make-server-279b4dfa/payment/init", async (c) => {
     try {
       const body = await c.req.json();
-      console.log(`[payment-proxy] plan=${body.plan} amount_from_frontend=${body.amount} expected=${getPriceRub(body.plan)}`);
+
+      // Пересчёт суммы по актуальному курсу ЦБ РФ (server-side source of truth)
+      const rate = await fetchUsdToRub();
+      const usd = body.plan === "lifetime" ? PRICE_LIFETIME_USD : PRICE_MONTH_USD;
+      const finalAmount = Math.round(usd * rate).toFixed(2);
+      console.log(`[payment-proxy] plan=${body.plan} frontend_amount=${body.amount} server_calculated=${finalAmount} rate=${rate}`);
+
+      const bodyWithCorrectAmount = { ...body, amount: finalAmount };
       const res = await fetch("https://bjhsgjsxhvwtuerahuha.supabase.co/functions/v1/super-task", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-site-key": Deno.env.get("PUBLIC_SITE_KEY") || "" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(bodyWithCorrectAmount),
       });
       const data = await res.json().catch(() => ({}));
       console.log("Payment proxy: super-task responded", res.status, JSON.stringify(data));
@@ -321,6 +353,24 @@ export function registerPaymentRoutes(app: Hono) {
     } catch (err) {
       console.log(`Payment proxy error: ${err}`);
       return c.json({ error: `Proxy error: ${err}` }, 500);
+    }
+  });
+
+  // ===== Current exchange rate + prices endpoint (used by frontend) =====
+  app.get("/make-server-279b4dfa/payment/exchange-rate", async (c) => {
+    try {
+      const rate = await fetchUsdToRub();
+      return c.json({
+        usdToRub: rate,
+        monthlyRub: Math.round(PRICE_MONTH_USD * rate),
+        lifetimeRub: Math.round(PRICE_LIFETIME_USD * rate),
+        monthlyUsd: PRICE_MONTH_USD,
+        lifetimeUsd: PRICE_LIFETIME_USD,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.log(`[exchange-rate] endpoint error: ${err}`);
+      return c.json({ error: `${err}` }, 500);
     }
   });
 
@@ -348,7 +398,7 @@ export function registerPaymentRoutes(app: Hono) {
       }
 
       // Amounts in RUB — берётся из SERVER_PRICING (source of truth)
-      const amount = getPriceRub(plan);
+      const amount = await getPriceRub(plan);
       const description = getPriceDescription(plan);
       console.log(`[yookassa] plan=${plan} amount=${amount} RUB desc=${description}`);
 
