@@ -5,7 +5,7 @@ import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import {
   Mail, Lock, User, LogIn, UserPlus, Loader2, CheckCircle,
   AlertCircle, KeyRound, ArrowLeft, GraduationCap, Sparkles,
-  BookOpen, Trophy, Brain, Repeat, Bot, Zap, ShieldCheck,
+  BookOpen, Trophy, Brain, Repeat, Bot, Zap,
 } from "lucide-react";
 import type { AuthState } from "./auth-modal";
 import { PrivacyPolicyModal } from "./privacy-policy";
@@ -37,9 +37,11 @@ const FEATURES = [
   { icon: <Zap className="w-4 h-4" />, text: "Прогресс синхронизируется в облаке" },
 ];
 
+const ADMIN_EMAIL = "lifesyncspace@gmail.com";
+
 interface AuthPageProps {
-  onAuth: (state: AuthState, isNewUser: boolean) => void;
-  onAdmin: () => void;
+  onAuth: (state: AuthState, isNewUser: boolean, adminPass?: string) => void;
+  onAdmin?: () => void;
   onBack?: () => void;
   initialMode?: "login" | "signup";
 }
@@ -87,17 +89,29 @@ export function AuthPage({ onAuth, onAdmin, onBack, initialMode }: AuthPageProps
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Ошибка регистрации"); setLoading(false); return; }
 
+      // Sign in via OTP token (works even if email password-auth is disabled in Supabase)
       const supabase = getSupabase();
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInErr) { setError(`Регистрация успешна, но ошибка входа: ${signInErr.message}`); setLoading(false); return; }
+      let signInSession: any = null;
 
-      const user = signInData.session?.user;
+      if (data.tokenHash) {
+        const { data: otpData, error: otpErr } = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: "magiclink" });
+        if (!otpErr) { signInSession = otpData.session; }
+        else { console.warn("verifyOtp failed, trying password:", otpErr.message); }
+      }
+
+      if (!signInSession) {
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) { setError(`Регистрация успешна, но ошибка входа: ${signInErr.message}`); setLoading(false); return; }
+        signInSession = signInData.session;
+      }
+
+      const user = signInSession?.user;
       const authState: AuthState = {
         isAuthenticated: true,
         userId: user?.id || null,
         email: user?.email || email,
         name: name || email.split("@")[0],
-        accessToken: signInData.session?.access_token || null,
+        accessToken: signInSession?.access_token || null,
       };
 
       const sessionId = localStorage.getItem("exam-session-id");
@@ -163,7 +177,8 @@ export function AuthPage({ onAuth, onAdmin, onBack, initialMode }: AuthPageProps
       }
 
       setSuccess("Вход выполнен! Загружаем ваш прогресс...");
-      setTimeout(() => onAuth(authState, false), 900);
+      const isAdmin = email.toLowerCase() === ADMIN_EMAIL;
+      setTimeout(() => onAuth(authState, false, isAdmin ? password : undefined), 900);
     } catch (err) {
       setError(`Ошибка: ${err}`);
     } finally {
@@ -499,16 +514,6 @@ export function AuthPage({ onAuth, onAdmin, onBack, initialMode }: AuthPageProps
                 </p>
               )}
 
-              {/* Admin button */}
-              <div className="pt-2 border-t border-border/20">
-                <button
-                  onClick={onAdmin}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-[0.8125rem] font-medium hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-300 transition-all"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  Войти как администратор
-                </button>
-              </div>
             </div>
           </div>
         </motion.div>

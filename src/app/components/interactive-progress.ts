@@ -151,7 +151,7 @@ const XP_LEVELS = [
   { level: 5, title: "Роща 🌲🌲", minXP: 300, maxXP: 500 },
   { level: 6, title: "Лес 🌲🌲🌲", minXP: 500, maxXP: 800 },
   { level: 7, title: "Тайга 🏞️", minXP: 800, maxXP: 1200 },
-  { level: 8, title: "Заповедник 🦉", minXP: 1200, maxXP: 2000 },
+  { level: 8, title: "Лесная поляна 🦔", minXP: 1200, maxXP: 2000 },
   { level: 9, title: "Вселенная каштанов 🌌", minXP: 2000, maxXP: Infinity },
 ];
 

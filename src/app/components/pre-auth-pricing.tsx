@@ -13,7 +13,7 @@ const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-se
 
 const PERKS = [
   { icon: <BookOpen className="w-3.5 h-3.5" />, text: "38 модулей · 60+ уроков" },
-  { icon: <Bot className="w-3.5 h-3.5" />,      text: "AI-ассистент Совунья" },
+  { icon: <Bot className="w-3.5 h-3.5" />,      text: "AI-ассистент Ёжуня" },
   { icon: <Trophy className="w-3.5 h-3.5" />,   text: "Сертификат по окончании" },
   { icon: <Zap className="w-3.5 h-3.5" />,      text: "Все тренажёры и симуляторы" },
 ];
@@ -111,7 +111,7 @@ export function PreAuthPricing({ onDemo, onLogin }: PreAuthPricingProps) {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-teal-200/50 dark:shadow-teal-900/50">
-            <span className="text-3xl">🦉</span>
+            <span className="text-3xl">🦔</span>
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">PM Академия</h1>
           <p className="text-muted-foreground">60+ уроков, AI-коуч и сертификат продакт-менеджера</p>

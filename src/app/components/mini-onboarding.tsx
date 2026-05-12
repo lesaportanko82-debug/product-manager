@@ -4,27 +4,38 @@ import {
   Brain, Trophy, Zap, ArrowRight, CheckCircle2,
   Target, Repeat, Bot, BookOpen, GraduationCap, Flame
 } from "lucide-react";
+import { OwlMascot, type OwlMood } from "./ai-assistant";
 
 interface MiniOnboardingProps {
   name: string;
   onComplete: () => void;
 }
 
-const STEPS = [
+type Step = {
+  mood: OwlMood;
+  title: (name: string) => string;
+  subtitle: string;
+  desc: string;
+  features?: { icon: any; text: string; color: string; bg: string }[] | null;
+  stats?: { value: string; label: string }[];
+  wow?: boolean;
+};
+
+const STEPS: Step[] = [
   {
-    emoji: "👋",
+    mood: "happy",
     title: (name: string) => `Привет, ${name || "будущий PM"}!`,
     subtitle: "Добро пожаловать в PM Академию",
-    desc: "Перед тобой полный курс по продакт-менеджменту — от основ до реальных кейсов. AI-коуч Совунья поможет разобраться с любым вопросом.",
+    desc: "Перед тобой полный курс по продакт-менеджменту — от основ до реальных кейсов. AI-коуч Ёжуня поможет разобраться с любым вопросом.",
     features: null,
   },
   {
-    emoji: "📚",
+    mood: "thinking",
     title: () => "Что тебя ждёт",
     subtitle: "24 модуля · 60+ уроков · AI-коуч · Сертификат",
     desc: "Практика, а не лекции. Каждый урок - конкретные фреймворки и задания для реального продакт-менеджера.",
     features: [
-      { icon: Bot, text: "AI-Совунья отвечает на вопросы 24/7", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20" },
+      { icon: Bot, text: "AI-Ёжуня отвечает на вопросы 24/7", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20" },
       { icon: Repeat, text: "Spaced repetition закрепляет знания", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
       { icon: Trophy, text: "Геймификация: бейджи и уровни", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20" },
       { icon: Target, text: "Capstone-проекты с AI-фидбэком", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-900/20" },
@@ -33,7 +44,19 @@ const STEPS = [
     ],
   },
   {
-    emoji: "🚀",
+    mood: "surprised",
+    wow: true,
+    title: () => "А ты знал?",
+    subtitle: "Один факт, который удивит",
+    desc: "В среднем выпускники наших потоков ускоряют переход в PM-роль в 3 раза — а 84% находят первую работу в продакте в течение полугода после курса.",
+    stats: [
+      { value: "×3",  label: "быстрее в PM-роли" },
+      { value: "84%", label: "трудоустройство" },
+      { value: "60+", label: "практических уроков" },
+    ],
+  },
+  {
+    mood: "encouraging",
     title: () => "Готов стартовать?",
     subtitle: "Прогресс сохраняется автоматически в облаке",
     desc: "Учись в своём темпе. Возвращайся с любого устройства - курс всегда ждёт тебя с того места, где ты остановился.",
@@ -87,14 +110,19 @@ export function MiniOnboarding({ name, onComplete }: MiniOnboardingProps) {
             <div className="h-1.5 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" style={{ width: `${((step + 1) / total) * 100}%`, transition: "width 0.4s ease" }} />
 
             <div className="p-8 sm:p-10 text-center">
-              {/* Emoji */}
+              {/* Hedgehog mascot with mood */}
               <motion.div
                 initial={{ scale: 0.5, rotate: -10 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 280, damping: 16, delay: 0.1 }}
-                className="text-6xl mb-5 select-none"
+                className={`mb-5 mx-auto flex items-center justify-center ${
+                  current.wow
+                    ? "w-28 h-28 rounded-3xl bg-gradient-to-br from-teal-50 to-emerald-100 dark:from-teal-900/30 dark:to-emerald-900/20 shadow-inner"
+                    : ""
+                }`}
+                style={{ width: 112, height: 112 }}
               >
-                {current.emoji}
+                <OwlMascot size={current.wow ? 100 : 96} mood={current.mood} animate />
               </motion.div>
 
               <h1 className="text-2xl sm:text-[1.625rem] font-bold text-foreground mb-2 leading-tight">
@@ -125,18 +153,18 @@ export function MiniOnboarding({ name, onComplete }: MiniOnboardingProps) {
                 </div>
               )}
 
-              {/* Stats (step 3) */}
-              {(current as any).stats && (
-                <div className={`grid gap-4 mb-7 ${(current as any).stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                  {(current as any).stats.map((s: any, i: number) => (
+              {/* Stats */}
+              {current.stats && (
+                <div className={`grid gap-4 mb-7 ${current.stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {current.stats.map((s, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 + i * 0.08 }}
-                      className="text-center"
+                      className={`text-center ${current.wow ? "p-3 rounded-xl bg-teal-50/60 dark:bg-teal-900/20 border border-teal-100/60 dark:border-teal-800/40" : ""}`}
                     >
-                      <div className="text-xl font-bold text-foreground">{s.value}</div>
+                      <div className={`font-bold ${current.wow ? "text-2xl text-teal-700 dark:text-teal-300" : "text-xl text-foreground"}`}>{s.value}</div>
                       <div className="text-[0.6875rem] text-muted-foreground mt-0.5">{s.label}</div>
                     </motion.div>
                   ))}

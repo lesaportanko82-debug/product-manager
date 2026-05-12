@@ -138,10 +138,12 @@ export async function loadProgressFromSupabase(
   }
 }
 
+const ADMIN_EMAIL = "lifesyncspace@gmail.com";
+
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAuth: (state: AuthState, isNewUser: boolean) => void;
+  onAuth: (state: AuthState, isNewUser: boolean, adminPass?: string) => void;
   showCloseButton?: boolean;
 }
 
@@ -181,19 +183,29 @@ export function AuthModal({ isOpen, onClose, onAuth, showCloseButton = true }: A
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Ошибка регистрации"); setLoading(false); return; }
 
-      // Now sign in
+      // Sign in via OTP token (works even if email password-auth is disabled in Supabase)
       const supabase = getSupabase();
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+      let signInSession: any = null;
 
-      if (signInErr) { setError(`Регистрация успешна, но ошибка входа: ${signInErr.message}`); setLoading(false); return; }
+      if (data.tokenHash) {
+        const { data: otpData, error: otpErr } = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: "magiclink" });
+        if (!otpErr) { signInSession = otpData.session; }
+        else { console.warn("verifyOtp failed, trying password:", otpErr.message); }
+      }
 
-      const user = signInData.session?.user;
+      if (!signInSession) {
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) { setError(`Регистрация успешна, но ошибка входа: ${signInErr.message}`); setLoading(false); return; }
+        signInSession = signInData.session;
+      }
+
+      const user = signInSession?.user;
       const authState: AuthState = {
         isAuthenticated: true,
         userId: user?.id || null,
         email: user?.email || email,
         name: name || email.split("@")[0],
-        accessToken: signInData.session?.access_token || null,
+        accessToken: signInSession?.access_token || null,
       };
 
       const sessionId = localStorage.getItem("exam-session-id");
@@ -278,7 +290,8 @@ export function AuthModal({ isOpen, onClose, onAuth, showCloseButton = true }: A
         } catch {}
       }
 
-      onAuth(authState, false);  // EXISTING user — login
+      const isAdmin = email.toLowerCase() === ADMIN_EMAIL;
+      onAuth(authState, false, isAdmin ? password : undefined);  // EXISTING user — login
       setSuccess("Вход выполнен!");
       setTimeout(onClose, 800);
     } catch (err) {

@@ -3,17 +3,17 @@
  */
 
 import { fetchWithRetry } from "./ai-helpers.tsx";
-import { getSovunyaSystemPrompt } from "./sovunya-system-prompt.tsx";
-import { getOpenAIConfig, SOVUNYA_CONSTANTS } from "./openai-config.tsx";
+import { getHedgehogSystemPrompt } from "./hedgehog-system-prompt.tsx";
+import { getOpenAIConfig, HEDGEHOG_CONSTANTS } from "./openai-config.tsx";
 
 export async function handleAIChatRequest(body: any): Promise<{ answer?: string; error?: string; status?: number }> {
   const { question, lessonTitle, lessonContent, moduleTitle } = body;
 
-  if (!question || question.trim().length < SOVUNYA_CONSTANTS.MIN_QUESTION_LENGTH) {
+  if (!question || question.trim().length < HEDGEHOG_CONSTANTS.MIN_QUESTION_LENGTH) {
     return { error: "Вопрос слишком короткий", status: 400 };
   }
 
-  if (question.length > SOVUNYA_CONSTANTS.MAX_QUESTION_LENGTH) {
+  if (question.length > HEDGEHOG_CONSTANTS.MAX_QUESTION_LENGTH) {
     return { error: "Вопрос слишком длинный (максимум 500 символов)", status: 400 };
   }
 
@@ -27,7 +27,7 @@ export async function handleAIChatRequest(body: any): Promise<{ answer?: string;
 
   try {
     // Use enhanced Sovunya personality
-    const systemPrompt = getSovunyaSystemPrompt(moduleTitle, lessonTitle, lessonContent);
+    const systemPrompt = getHedgehogSystemPrompt(moduleTitle, lessonTitle, lessonContent);
 
     const response = await fetchWithRetry(`${config.baseURL}/chat/completions`, {
       method: "POST",

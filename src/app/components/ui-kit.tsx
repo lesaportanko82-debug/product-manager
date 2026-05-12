@@ -700,7 +700,7 @@ function StatesSection() {
             { lvl: 5, title: "Роща 🌲🌲", xp: "300–500" },
             { lvl: 6, title: "Лес 🌲🌲🌲", xp: "500–800" },
             { lvl: 7, title: "Тайга 🏞️", xp: "800–1200" },
-            { lvl: 8, title: "Заповедник 🦉", xp: "1200–2000" },
+            { lvl: 8, title: "Лесная поляна 🦔", xp: "1200–2000" },
             { lvl: 9, title: "Вселенная 🌌", xp: "2000+" },
           ].map(l => (
             <div key={l.lvl} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-card border border-border/30 text-[0.75rem]">

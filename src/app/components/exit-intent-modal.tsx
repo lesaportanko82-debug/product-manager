@@ -224,10 +224,10 @@ export function ExitIntentModal({ isFreeTier, onUpgrade, onGoToLesson, onGoToAut
                   >
                     {/* Header */}
                     <div className="flex items-start gap-3 mb-4">
-                      <span className="text-3xl select-none leading-none mt-0.5">🦉</span>
+                      <span className="text-3xl select-none leading-none mt-0.5">🦔</span>
                       <div>
                         <h2 className="text-[0.9375rem] font-bold text-slate-900 dark:text-slate-100 leading-snug">
-                          Подождите — Совунья хочет сделать предложение
+                          Подождите — Ёжуня хочет сделать предложение
                         </h2>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                           Расскажите, почему не берёте полный доступ —&nbsp;
@@ -347,7 +347,7 @@ export function ExitIntentModal({ isFreeTier, onUpgrade, onGoToLesson, onGoToAut
                         transition={{ delay: 0.1, type: "spring", stiffness: 260, damping: 18 }}
                         className="text-5xl mb-3 select-none"
                       >
-                        🦉🔐
+                        🦔🔐
                       </motion.div>
                       <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                         Уроки зарезервированы!

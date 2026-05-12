@@ -95,7 +95,7 @@ export function AuthModeSelector({ onDemoMode, onSignup, onLogin, onBack }: Auth
                 </div>
                 <div className="flex items-start gap-2 text-sm">
                   <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700 dark:text-gray-300">AI-ассистент Совунья</span>
+                  <span className="text-gray-700 dark:text-gray-300">AI-ассистент Ёжуня</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm">
                   <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />

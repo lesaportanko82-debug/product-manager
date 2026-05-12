@@ -30,6 +30,19 @@ export function registerAuthAdminRoutes(app: Hono) {
       });
       if (error) { console.log(`Signup error: ${error.message}`); return c.json({ error: error.message }, 400); }
 
+      // Generate a magic link token so the frontend can sign in without password auth
+      let tokenHash: string | null = null;
+      try {
+        const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({ type: "magiclink", email });
+        if (!linkErr && linkData?.properties?.hashed_token) {
+          tokenHash = linkData.properties.hashed_token;
+        } else if (linkErr) {
+          console.log(`[signup] generateLink warning (non-fatal): ${linkErr.message}`);
+        }
+      } catch (linkEx) {
+        console.log(`[signup] generateLink exception (non-fatal): ${linkEx}`);
+      }
+
       // ── Auto-grant access if pre-auth payment was made with this email ──
       const userId = data.user?.id;
       if (userId) {
@@ -52,14 +65,14 @@ export function registerAuthAdminRoutes(app: Hono) {
             });
             await kv.del(`pending-access-by-email:${emailLower}`);
             console.log(`[signup] ✅ pre-auth access transferred: email=${emailLower} plan=${pending.plan} → userId=${userId}`);
-            return c.json({ user: { id: userId, email: data.user?.email }, accessGranted: true, plan: pending.plan });
+            return c.json({ user: { id: userId, email: data.user?.email }, accessGranted: true, plan: pending.plan, tokenHash });
           }
         } catch (accessErr) {
           console.log(`[signup] access transfer error (non-fatal): ${accessErr}`);
         }
       }
 
-      return c.json({ user: { id: userId, email: data.user?.email } });
+      return c.json({ user: { id: userId, email: data.user?.email }, tokenHash });
     } catch (err) {
       console.log(`Error in signup: ${err}`);
       return c.json({ error: `Signup error: ${err}` }, 500);

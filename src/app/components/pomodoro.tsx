@@ -5,6 +5,7 @@ import {
   X, ChevronDown, ChevronUp, Settings, Volume2, VolumeX,
   Flame, Trophy, Minus, Plus, Bell, BellOff, BellRing, CheckCircle
 } from "lucide-react";
+import { OwlMascot, type OwlMood } from "./ai-assistant";
 
 // ===== Types =====
 type PomodoroPhase = "focus" | "shortBreak" | "longBreak";
@@ -157,9 +158,16 @@ function saveStats(stats: PomodoroStats) {
 }
 
 // ===== In-App Toast =====
+const TOAST_MOODS: Record<PomodoroPhase, OwlMood> = {
+  focus:      "celebrating",  // just finished focus session
+  shortBreak: "encouraging",  // break ended, time to refocus
+  longBreak:  "happy",        // long break ended, refreshed
+};
+
 function PomodoroToast({ toast, onDismiss }: { toast: InAppToast; onDismiss: (id: number) => void }) {
   const config = PHASE_CONFIG[toast.phase];
   const PIcon = config.icon;
+  const mood = TOAST_MOODS[toast.phase];
 
   useEffect(() => {
     const t = setTimeout(() => onDismiss(toast.id), 6000);
@@ -178,8 +186,11 @@ function PomodoroToast({ toast, onDismiss }: { toast: InAppToast; onDismiss: (id
       {/* Top accent bar */}
       <div className={`h-1 bg-gradient-to-r ${config.bgColor}`} />
       <div className="px-4 py-3 flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${config.bgColor} flex items-center justify-center shrink-0 shadow-sm`}>
+        <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${config.bgColor} flex items-center justify-center shrink-0 shadow-sm relative`}>
           <PIcon className="w-4 h-4 text-white" />
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white dark:bg-card border border-border/40 flex items-center justify-center shadow-sm">
+            <OwlMascot size={14} mood={mood} />
+          </div>
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[0.8125rem] font-semibold text-foreground leading-tight">{toast.title}</p>
@@ -759,6 +770,25 @@ export function PomodoroTimer() {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                   >
+                    {/* Hedgehog mascot reflecting current phase/state */}
+                    <div className="flex justify-center mb-1">
+                      <OwlMascot
+                        size={56}
+                        animate
+                        mood={
+                          phase === "longBreak"
+                            ? "sleeping"
+                            : phase === "shortBreak"
+                              ? "happy"
+                              : isRunning
+                                ? "thinking"
+                                : timeLeft < settings.focusMinutes * 60
+                                  ? "surprised"
+                                  : "encouraging"
+                        }
+                      />
+                    </div>
+
                     {/* Timer circle */}
                     <div className="flex justify-center mb-4">
                       <CircleProgress progress={progress} size={140} strokeWidth={5} color={circleColor}>

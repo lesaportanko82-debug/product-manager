@@ -58,9 +58,9 @@ export async function checkOpenAIHealth(): Promise<{ ok: boolean; error?: string
   }
 }
 
-export const SOVUNYA_CONSTANTS = {
-  EMOJI: "🦉",
-  NAME: "Совунья",
+export const HEDGEHOG_CONSTANTS = {
+  EMOJI: "🦔",
+  NAME: "Ёжуня",
   ROLE: "AI-ассистент курса PM Академия",
   MAX_QUESTION_LENGTH: 500,
   MIN_QUESTION_LENGTH: 3,

@@ -15,7 +15,7 @@ const PAYMENT_PROXY_URL = `https://${projectId}.supabase.co/functions/v1/make-se
 
 const PERKS = [
   { icon: <BookOpen className="w-4 h-4" />, text: "38 модулей, 60+ уроков по продакт-менеджменту" },
-  { icon: <Bot className="w-4 h-4" />, text: "AI-ассистент Совунья без ограничений" },
+  { icon: <Bot className="w-4 h-4" />, text: "AI-ассистент Ёжуня без ограничений" },
   { icon: <Trophy className="w-4 h-4" />, text: "Финальный экзамен + именной сертификат" },
   { icon: <Zap className="w-4 h-4" />, text: "Все тренажёры, симуляторы и практические инструменты" },
   { icon: <Star className="w-4 h-4" />, text: "Пожизненный доступ ко всем обновлениям курса" },
@@ -147,7 +147,7 @@ export function DemoUpgradeBanner({ onGoToSignup, userId, userEmail, accessToken
 
         <div className="flex items-center gap-3 mb-4 relative">
           <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
-            <span className="text-2xl">🦉</span>
+            <span className="text-2xl">🦔</span>
           </div>
           <div>
             <p className="text-white/70 text-[0.75rem] font-medium uppercase tracking-wider">Демо завершено</p>

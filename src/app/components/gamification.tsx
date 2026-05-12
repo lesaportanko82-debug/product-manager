@@ -181,7 +181,7 @@ export function BadgesPanel({ completedLessons, examScore }: { completedLessons:
   const locked = ALL_BADGES.filter(b => !earned.includes(b));
   const levelInfo = getXPLevel(xp);
 
-  // Detect new badges and trigger Совунья celebration
+  // Detect new badges and trigger Ёжуня celebration
   useEffect(() => {
     const currentBadgeIds = new Set(earned.map(b => b.id));
     const newBadges = earned.filter(b => !previousBadgeIds.has(b.id));

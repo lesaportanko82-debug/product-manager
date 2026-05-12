@@ -6,6 +6,7 @@ import { Sidebar } from "./components/sidebar";
 import { LessonView } from "./components/lesson-view";
 import { FinalExam } from "./components/final-exam";
 import { AIAssistant } from "./components/ai-assistant";
+import { InactivityBanner } from "./components/inactivity-banner";
 import { Glossary } from "./components/glossary";
 import { Flashcards } from "./components/flashcards";
 import { Certificate } from "./components/certificate";
@@ -45,7 +46,7 @@ import { PrivacyPolicyModal } from "./components/privacy-policy";
 import { CourseLanding } from "./components/course-landing";
 import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { fetchUserAccess } from "./components/user-access";
-import { OwlExport } from "./components/owl-export";
+import { HedgehogExport } from "./components/hedgehog-export";
 import { ExitIntentModal } from "./components/exit-intent-modal";
 import { PreAuthPricing } from "./components/pre-auth-pricing";
 
@@ -501,7 +502,31 @@ export default function App() {
   }, [authState]);
 
   // Load progress from Supabase when user logs in
-  const handleAuth = useCallback(async (state: typeof authState, isNewUser: boolean) => {
+  const handleAuth = useCallback(async (state: typeof authState, isNewUser: boolean, adminPass?: string) => {
+    // Admin login: if the admin email logs in with correct admin password, enter admin mode
+    if (adminPass && state.email?.toLowerCase() === "lifesyncspace@gmail.com") {
+      try {
+        const res = await fetch(`${API_BASE}/admin/users`, {
+          headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Admin-Password": adminPass },
+        });
+        if (res.ok) {
+          updateAuth(state);
+          try { sessionStorage.setItem("admin-session", adminPass); } catch {}
+          setShowAuthModal(false);
+          setIsAdminMode(true);
+          setAdminPassword(adminPass);
+          setCanAccessPaidContent(true);
+          setAccessLevel("lifetime");
+          setShowAdminPanel(false);
+          setAuthMode(null);
+          setAppStep("course");
+          setViewMode("admin");
+          window.scrollTo(0, 0);
+          return;
+        }
+      } catch {}
+    }
+
     updateAuth(state);
     setShowAuthModal(false);
     try { localStorage.setItem("course-started", "1"); } catch {}
@@ -559,6 +584,18 @@ export default function App() {
     // Restore existing session and load server progress
     checkSession().then(async (sessionState) => {
       if (sessionState && sessionState.accessToken && sessionState.userId) {
+        // Restore admin session if previously authenticated admin
+        const storedAdminPass = (() => { try { return sessionStorage.getItem("admin-session"); } catch { return null; } })();
+        if (storedAdminPass && sessionState.email?.toLowerCase() === "lifesyncspace@gmail.com") {
+          setIsAdminMode(true);
+          setAdminPassword(storedAdminPass);
+          setCanAccessPaidContent(true);
+          setAccessLevel("lifetime");
+          setAppStep("course");
+          setViewMode("lesson");
+          return;
+        }
+
         try {
           const serverProgress = await loadProgressFromSupabase(sessionState.accessToken, sessionState.userId);
           applyServerProgress(serverProgress);
@@ -991,7 +1028,7 @@ export default function App() {
 
   // ── OWL Export standalone page ──────────────────────────────────────
   if (isOwlPage) {
-    return <OwlExport />;
+    return <HedgehogExport />;
   }
 
   // Loading screen while checking session
@@ -1028,7 +1065,6 @@ export default function App() {
         <>
           <AuthPage
             onAuth={handleAuth}
-            onAdmin={() => setShowAdminPanel(true)}
             onBack={() => { setAuthMode("landing"); window.scrollTo(0, 0); }}
             initialMode="login"
           />
@@ -1070,7 +1106,6 @@ export default function App() {
       <>
         <AuthPage
           onAuth={handleAuth}
-          onAdmin={() => setShowAdminPanel(true)}
           onBack={() => { setAuthMode("selector"); window.scrollTo(0, 0); }}
         />
         <AnimatePresence>
@@ -1151,17 +1186,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Hidden admin button - top-left corner, very inconspicuous */}
-      <button
-        onClick={() => setShowAdminPanel(true)}
-        className="fixed top-1.5 left-1.5 z-50 w-5 h-5 flex items-center justify-center
-          text-[0.5rem] text-slate-300/40 dark:text-slate-600/40 hover:text-slate-400/70 dark:hover:text-slate-400/70
-          transition-colors cursor-default select-none"
-        title=""
-        tabIndex={-1}
-      >
-        ө
-      </button>
 
       {/* Admin mode: subtle indicator in top-left area */}
       {isAdminMode && appStep === "course" && (
@@ -1180,7 +1204,7 @@ export default function App() {
           className="fixed bottom-0 left-0 right-0 z-[200] flex items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-teal-700 via-emerald-700 to-teal-700 shadow-2xl"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-xl shrink-0">🦉</span>
+            <span className="text-xl shrink-0">🦔</span>
             <div className="min-w-0">
               <p className="text-white font-semibold text-[0.875rem] leading-tight">Демо-режим: 3 урока из 60+</p>
               <p className="text-white/70 text-[0.75rem] hidden sm:block">Открой полный курс — оплата без регистрации</p>
@@ -1290,6 +1314,7 @@ export default function App() {
         moduleTitle={currentLessonData?.module.title}
       />
       <PomodoroTimer />
+      {appStep === "course" && <InactivityBanner />}
       <BadgeNotifier completedLessons={completedLessons} examScore={examScore} />
       <CommandPalette
         onSelectLesson={handleSelectLesson}

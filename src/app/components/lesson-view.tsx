@@ -19,7 +19,6 @@ import { LessonDiscussion } from "./peer-learning";
 import { CapstonePortfolioWidget } from "./capstone-projects";
 import { PMCoachWidget } from "./pm-coach";
 import { DemoUpgradeBanner } from "./demo-upgrade-banner";
-import { YaroslavAuthorCard } from "./yaroslav-author-card";
 import { YaroslavTelegramBanner } from "./yaroslav-telegram-banner";
 import { UXUIVisualContent } from "./uxui-visual-content";
 import { NotebookTextarea, NotebookWidget } from "./practice-notebook";
@@ -859,7 +858,7 @@ function PracticeSection({ lessonId, tasks }: { lessonId: string; tasks: string[
                   +{chestnutToast.amount} 🌰
                 </p>
                 <p className="text-[0.625rem] leading-tight text-amber-600/70">
-                  {chestnutToast.allDone ? "Все задания выполнены! 🦉" : "За практику"}
+                  {chestnutToast.allDone ? "Все задания выполнены! 🦔" : "За практику"}
                 </p>
               </div>
             </div>
@@ -1695,7 +1694,7 @@ function WelcomeView({ completedLessons, onSelectLesson, onOpenFinalExam, onOpen
               {toolsLocked ? (
                 <div className="flex items-center gap-3 p-4 bg-card rounded-2xl border border-dashed border-border/30 opacity-60 cursor-not-allowed select-none" title="Доступно после оплаты">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center shrink-0 relative">
-                    <span className="text-xl opacity-30">🦉</span>
+                    <span className="text-xl opacity-30">🦔</span>
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Lock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                     </div>

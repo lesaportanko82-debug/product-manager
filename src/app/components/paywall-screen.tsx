@@ -62,7 +62,7 @@ interface PaywallScreenProps {
 
 const PERKS = [
   { icon: <BookOpen className="w-4 h-4" />, text: "24 модуля, 60+ уроков по продакт-менеджменту" },
-  { icon: <Bot className="w-4 h-4" />,      text: "AI-ассистент Совунья без ограничений" },
+  { icon: <Bot className="w-4 h-4" />,      text: "AI-ассистент Ёжуня без ограничений" },
   { icon: <Trophy className="w-4 h-4" />,   text: "Финальный экзамен + именной сертификат" },
   { icon: <Zap className="w-4 h-4" />,      text: "Все тренажёры, симуляторы и инструменты" },
   { icon: <Star className="w-4 h-4" />,     text: "Пожизненный доступ ко всем обновлениям" },
