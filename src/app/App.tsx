@@ -2135,29 +2135,6 @@ export default function App() {
         accessToken={authState.accessToken ?? undefined}
       />
 
-      {/* Exit-intent modal — на лендинге (главная страница) */}
-      <ExitIntentModal
-        isFreeTier={
-          appStep === "auth" && authMode === "landing"
-        }
-        onUpgrade={() => {
-          setPaywallModuleTitle("Полный доступ к курсу");
-          setShowPaywall(true);
-        }}
-        onUnlockLessons={(ids) => {
-          setBonusLessons(new Set(ids));
-        }}
-        onGoToLesson={(lessonId) => {
-          setSelectedLesson(lessonId);
-          setViewMode("lesson");
-          window.scrollTo(0, 0);
-        }}
-        onGoToAuth={() => {
-          setAppStep("auth");
-          setAuthMode("selector");
-          window.scrollTo(0, 0);
-        }}
-      />
     </div>
   );
 }

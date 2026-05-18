@@ -50,28 +50,54 @@ export function ExitIntentModal({ isFreeTier, onUpgrade, onGoToAuth }: ExitInten
     let cleanupFn: (() => void) | null = null;
 
     const timer = setTimeout(() => {
-      let lastY = window.innerHeight;
+      const isMobile = window.matchMedia("(pointer: coarse)").matches;
 
-      const onMouseLeave = (e: MouseEvent) => { if (e.clientY <= 0) tryShow(); };
-      const onMouseMove = (e: MouseEvent) => {
-        const y = e.clientY;
-        if (y <= 8 && lastY > 60) tryShow();
-        lastY = y;
-      };
-      const onVisibility = () => { if (document.visibilityState === "hidden") tryShow(); };
-      const onPopState = () => tryShow();
+      if (isMobile) {
+        // Mobile: триггер — быстрый скролл вверх после того как пользователь
+        // прокрутил вниз хотя бы на 150px (значит он изучал страницу, а теперь уходит)
+        let lastScrollY = window.scrollY;
+        let maxScrollY = window.scrollY;
+        let ticking = false;
 
-      document.documentElement.addEventListener("mouseleave", onMouseLeave);
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("visibilitychange", onVisibility);
-      window.addEventListener("popstate", onPopState);
+        const onScroll = () => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            const currentY = window.scrollY;
+            maxScrollY = Math.max(maxScrollY, currentY);
+            const scrolledUpBy = lastScrollY - currentY;
+            // Сработает если: был далеко вниз (>150px) И резко поднялся (>80px за один рывок)
+            if (maxScrollY > 150 && scrolledUpBy > 80) tryShow();
+            lastScrollY = currentY;
+            ticking = false;
+          });
+        };
 
-      cleanupFn = () => {
-        document.documentElement.removeEventListener("mouseleave", onMouseLeave);
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("visibilitychange", onVisibility);
-        window.removeEventListener("popstate", onPopState);
-      };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        cleanupFn = () => window.removeEventListener("scroll", onScroll);
+      } else {
+        // Desktop: lastY = -1 означает «ещё не знаем позицию»
+        let lastY = -1;
+
+        // Основной триггер: мышь ушла за верхний край (к адресной строке / кнопке закрытия)
+        const onMouseLeave = (e: MouseEvent) => {
+          if (e.clientY <= 0) tryShow();
+        };
+
+        // Дублирующий: резкое движение с середины страницы к самому верху
+        const onMouseMove = (e: MouseEvent) => {
+          const y = e.clientY;
+          if (lastY !== -1 && y <= 5 && lastY > 100) tryShow();
+          lastY = y;
+        };
+
+        document.documentElement.addEventListener("mouseleave", onMouseLeave);
+        document.addEventListener("mousemove", onMouseMove);
+        cleanupFn = () => {
+          document.documentElement.removeEventListener("mouseleave", onMouseLeave);
+          document.removeEventListener("mousemove", onMouseMove);
+        };
+      }
     }, 3000);
 
     return () => {
