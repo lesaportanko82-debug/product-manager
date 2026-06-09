@@ -881,25 +881,37 @@ export default function App() {
         state.accessToken &&
         state.userId
       ) {
-        // EXISTING account: wipe local data first, then load strictly from server
-        clearAllLocalData();
-        setCompletedLessons(new Set<string>());
-        setBookmarks(new Set<string>());
-        setExamScore(null);
+        // EXISTING account: load from server first, preserve local if server is empty
         try {
           const serverProgress = await loadProgressFromSupabase(
             state.accessToken,
             state.userId,
           );
-          applyServerProgress(serverProgress);
-          if (!serverProgress) {
-            saveProgressToSupabase(
-              state.accessToken,
-              state.userId,
-              [],
-              [],
-              null,
-            );
+          // Check if server has any meaningful data
+          const hasServerData = serverProgress && (
+            (serverProgress.completedLessons && serverProgress.completedLessons.length > 0) ||
+            (serverProgress.bookmarks && serverProgress.bookmarks.length > 0) ||
+            serverProgress.examScore != null
+          );
+
+          if (hasServerData) {
+            // Server has data — apply it and clear local conflicting data
+            clearAllLocalData();
+            applyServerProgress(serverProgress);
+          } else {
+            // Server is empty — keep local data and sync it to server
+            const localCompleted = [...completedLessons];
+            const localBookmarks = [...bookmarks];
+            if (localCompleted.length > 0 || localBookmarks.length > 0 || examScore != null) {
+              // Sync local → server
+              saveProgressToSupabase(
+                state.accessToken,
+                state.userId,
+                localCompleted,
+                localBookmarks,
+                examScore,
+              );
+            }
           }
         } catch {}
         // Load access level
@@ -971,7 +983,29 @@ export default function App() {
                 sessionState.accessToken,
                 sessionState.userId,
               );
-            applyServerProgress(serverProgress);
+            // Check if server has any meaningful data
+            const hasServerData = serverProgress && (
+              (serverProgress.completedLessons && serverProgress.completedLessons.length > 0) ||
+              (serverProgress.bookmarks && serverProgress.bookmarks.length > 0) ||
+              serverProgress.examScore != null
+            );
+
+            if (hasServerData) {
+              applyServerProgress(serverProgress);
+            } else {
+              // Server is empty — sync local → server
+              const localCompleted = [...completedLessons];
+              const localBookmarks = [...bookmarks];
+              if (localCompleted.length > 0 || localBookmarks.length > 0 || examScore != null) {
+                saveProgressToSupabase(
+                  sessionState.accessToken,
+                  sessionState.userId,
+                  localCompleted,
+                  localBookmarks,
+                  examScore,
+                );
+              }
+            }
           } catch {}
           await loadAccessLevel(
             sessionState.accessToken,

@@ -119,7 +119,6 @@ const reviews = [
 ];
 
 const socialProof = [
-  { value: "4.8/5", label: "средняя оценка" },
   { value: "92%", label: "дошли до сертификата" },
   { value: "87%", label: "применяют на практике" },
 ];

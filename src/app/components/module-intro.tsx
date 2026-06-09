@@ -39,7 +39,7 @@ const MODULE_ICONS: Record<string, string> = {
   m21: "📐", m22: "🧪", m23: "🌱", m24: "🏆",
 };
 
-const LESSON_MINUTES = 5;
+const LESSON_MINUTES = 10;
 
 export function ModuleIntroScreen({ module, onStart, lessonCount }: ModuleIntroProps) {
   const emoji = MODULE_ICONS[module.id] || "📚";

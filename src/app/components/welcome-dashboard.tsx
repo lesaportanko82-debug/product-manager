@@ -14,7 +14,7 @@ interface WelcomeDashboardProps {
   onOpenDiagnostic: () => void;
 }
 
-const LESSON_MINUTES = 5; // avg minutes per lesson
+const LESSON_MINUTES = 10; // avg minutes per lesson
 
 export function WelcomeDashboard({
   name,
@@ -54,16 +54,16 @@ export function WelcomeDashboard({
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-teal-950/20 dark:to-slate-900 flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
-        {/* ── Desktop recommendation banner ── */}
+        {/* ── Value proposition banner ── */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="flex items-start gap-3 px-4 py-3 mb-5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-700/40"
+          className="flex items-start gap-3 px-4 py-3 mb-5 rounded-xl bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 border border-teal-200/70 dark:border-teal-700/40"
         >
-          <Monitor className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-[0.8125rem] text-amber-800 dark:text-amber-300 leading-relaxed">
-            Для максимального комфорта рекомендуем проходить курс с компьютера или ноутбука — так вам будет удобнее работать с материалами и выполнять задания.
+          <Zap className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+          <p className="text-[0.8125rem] text-teal-800 dark:text-teal-300 leading-relaxed font-medium">
+            <span className="font-semibold">60+ практических уроков, реальные кейсы и сертификат.</span> Станьте продакт-менеджером с портфолио проектов!
           </p>
         </motion.div>
 
